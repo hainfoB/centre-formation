@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% set public = true %}
+{% block public %}<div class="card" style="max-width:420px;margin:40px auto"><h1>Connexion</h1><p class="muted small">Espace administration</p>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="fields" style="grid-template-columns:1fr">
+<div><label>Email</label><input type="email" name="email" required autofocus></div>
+<div><label>Mot de passe</label><input type="password" name="password" required></div>
+<button class="btn o">Se connecter</button></div></form></div>{% endblock %}

@@ -1,0 +1,30 @@
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="fields">
+<div class="full"><label>Titre *</label><input name="title" value="{{ fo.title if fo else '' }}" required></div>
+<div class="full"><label>Description</label><textarea name="description" rows="3">{{ fo.description or '' if fo }}</textarea></div>
+<div><label>Formateur (compte)</label><select name="trainer_id"><option value="">—</option>{% for t in trainers %}<option value="{{ t.id }}" {{ 'selected' if fo and fo.trainer_id==t.id }}>{{ t.name }}</option>{% endfor %}</select></div>
+<div><label>Formateur (nom affiché)</label><input name="trainer" value="{{ fo.trainer or '' if fo }}"></div>
+<div><label>Public visé</label><input name="audience" value="{{ fo.audience or '' if fo }}"></div>
+<div><label>Mode</label><select name="mode">{% for m in ('onsite','online','hybrid') %}<option value="{{ m }}" {{ 'selected' if fo and fo.mode==m }}>{{ L[m] }}</option>{% endfor %}</select></div>
+<div><label>Lieu / salle</label><input name="location" value="{{ fo.location or '' if fo }}"></div>
+<div><label>Lien en ligne (Meet…)</label><input name="online_url" value="{{ fo.online_url or '' if fo }}"></div>
+<div><label>Groupe WhatsApp / Telegram</label><input name="group_url" value="{{ fo.group_url or '' if fo }}"></div>
+<div><label>Début</label><input type="date" name="starts_on" value="{{ fo.starts_on or '' if fo }}"></div>
+<div><label>Fin</label><input type="date" name="ends_on" value="{{ fo.ends_on or '' if fo }}"></div>
+<div><label>Heure début</label><input type="time" name="start_time" value="{{ fo.start_time or '' if fo }}"></div>
+<div><label>Heure fin</label><input type="time" name="end_time" value="{{ fo.end_time or '' if fo }}"></div>
+<div><label>Volume horaire (h)</label><input type="number" name="hours_total" value="{{ fo.hours_total if fo else 0 }}"></div>
+<div><label>Places (0 = illimité)</label><input type="number" name="seats" value="{{ fo.seats if fo else 0 }}"></div>
+<div class="full"><label class="check"><input type="checkbox" name="is_free" {{ 'checked' if fo and fo.is_free }}> Formation gratuite</label></div>
+<div><label>Frais d'inscription (DA)</label><input type="number" name="registration_fee" value="{{ fo.registration_fee if fo else 0 }}"></div>
+<div><label>Prix de la formation (DA)</label><input type="number" name="price_total" value="{{ fo.price_total if fo else 0 }}"></div>
+<div><label>Nombre de mensualités</label><input type="number" name="installments" min="1" max="36" value="{{ fo.installments if fo else 1 }}"></div>
+<div class="full"><label>Modalités de paiement (affichées dans les rappels)</label><textarea name="payment_info" rows="2">{{ fo.payment_info or '' if fo }}</textarea></div>
+<div><label>Pointage</label><select name="check_mode"><option value="in">Entrée seulement</option><option value="inout" {{ 'selected' if fo and fo.check_mode=='inout' }}>Entrée et sortie</option></select></div>
+<div><label>Tolérance retard (min)</label><input type="number" name="late_tolerance" value="{{ fo.late_tolerance if fo else 15 }}"></div>
+<div><label>Assiduité min. attestation (%)</label><input type="number" name="min_attendance" value="{{ fo.min_attendance if fo else 80 }}"></div>
+<div class="full row" style="gap:18px"><label class="check"><input type="checkbox" name="cert_requires_payment" {{ 'checked' if not fo or fo.cert_requires_payment }}> Attestation seulement si tout est payé</label>
+<label class="check"><input type="checkbox" name="auto_confirm" {{ 'checked' if fo and fo.auto_confirm }}> Confirmer automatiquement les inscriptions en ligne</label></div>
+<div class="full"><label>Programme (un point par ligne)</label><textarea name="programme" rows="4">{{ fo.programme or '' if fo }}</textarea></div>
+<div class="full"><label>Prérequis (un par ligne)</label><textarea name="prerequisites" rows="2">{{ fo.prerequisites or '' if fo }}</textarea></div>
+</div>

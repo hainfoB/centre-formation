@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% set public = true %}
+{% block public %}<div class="card" style="max-width:460px;margin:30px auto"><h1>Première configuration</h1>
+<p class="muted small">Créez le compte administrateur du centre.</p>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="fields" style="grid-template-columns:1fr">
+<div><label>Nom du centre</label><input name="centre_name" placeholder="Ex. : École Excellence Formation"></div>
+<div><label>Votre nom</label><input name="name" required></div>
+<div><label>Email</label><input type="email" name="email" required></div>
+<div><label>Mot de passe (8 caractères min.)</label><input type="password" name="password" minlength="8" required></div>
+<button class="btn o">Créer le compte</button></div></form></div>{% endblock %}

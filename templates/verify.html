@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% set public = true %}{% block public %}<div class="card center" style="margin-top:20px">
+{% if enr %}<h1 style="color:var(--ok)"><i class="bi bi-patch-check-fill"></i> Attestation authentique</h1><p><b>{{ enr.student.last_name|upper }} {{ enr.student.first_name }}</b><br>{{ enr.formation.title }}<br><span class="small muted">N° {{ enr.cert_no }} · délivrée le {{ enr.cert_issued_on|d }}</span></p>
+{% else %}<h1 style="color:var(--err)"><i class="bi bi-x-octagon-fill"></i> Attestation introuvable</h1><p class="muted">Ce document n'a pas été délivré par {{ centre.centre_name }}.</p>{% endif %}</div>{% endblock %}

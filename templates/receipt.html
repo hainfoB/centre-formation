@@ -1,0 +1,12 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Reçu {{ p.receipt_no }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>body{background:#fff}.r{max-width:720px;margin:20px auto;padding:26px;border:1.5px solid var(--line);border-radius:14px}.rh{display:flex;justify-content:space-between;border-bottom:4px solid var(--orange);padding-bottom:12px;margin-bottom:16px}.amt{font-size:28px;font-weight:800;color:var(--navy);background:var(--sky);padding:12px 16px;border-radius:12px;display:inline-block}td{border:none;padding:5px 0}</style></head>
+<body><div class="r"><div class="rh"><div><b style="font-size:19px">{{ centre.centre_name }}</b><div class="xs muted">{{ centre.centre_address }}<br>{{ centre.centre_phone }} {{ centre.centre_email }}{% if centre.centre_agrement %}<br>Agrément : {{ centre.centre_agrement }}{% endif %}</div></div>
+<div class="right"><b style="font-size:20px;color:var(--orange)">REÇU DE PAIEMENT</b><div>N° <b>{{ p.receipt_no }}</b></div><div class="small">{{ p.paid_on|d }}</div></div></div>
+<table><tr><td class="muted" style="width:170px">Reçu de</td><td><b>{{ st.full_name }}</b>{% if st.parent_name %} <span class="muted small">(parent : {{ st.parent_name }})</span>{% endif %}</td></tr>
+<tr><td class="muted">Formation</td><td>{{ fo.title }}</td></tr><tr><td class="muted">Objet</td><td>{{ p.label }}</td></tr>
+<tr><td class="muted">Mode de paiement</td><td>{{ L.get(p.method, p.method) }}</td></tr><tr><td class="muted">Encaissé par</td><td>{{ p.collected_by or '' }}</td></tr></table>
+<p><span class="amt">{{ p.amount|da }}</span></p>
+<p class="small muted">Total formation : {{ money.expected|da }} · déjà réglé : {{ money.paid|da }} · reste : <b>{{ money.remaining|da }}</b></p>
+<div class="row" style="justify-content:space-between;margin-top:40px"><span class="small">Signature du stagiaire / parent</span><span class="small">Cachet et signature du centre</span></div></div>
+<p class="center noprint"><button class="btn o" onclick="print()"><i class="bi bi-printer"></i> Imprimer</button></p></body></html>

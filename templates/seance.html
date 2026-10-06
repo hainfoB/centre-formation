@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block content %}
+<div class="head"><div><div class="small muted">{% if current_user.can('manage') %}<a href="{{ url_for('formation_detail', fid=fo.id, tab='seances') }}">{{ fo.title }}</a>{% else %}{{ fo.title }}{% endif %} /</div>
+<h1>Séance du {{ s.day|d }}</h1><div class="small muted">{{ s.time_label or fo.default_time_label() }} · tolérance retard {{ fo.late_tolerance }} min · pointage {{ 'entrée + sortie' if fo.check_mode=='inout' else 'entrée' }}</div></div>
+<div class="row small"><span class="badge b-present">{{ counts.present }} présents</span><span class="badge b-late">{{ counts.late }} retards</span><span class="badge b-absent">{{ counts.absent }} absents</span><span class="badge b-excused">{{ counts.excused }} excusés</span> / {{ enrs|length }}</div></div>
+
+<div class="grid g3">
+<div class="card"><h3><i class="bi bi-phone" style="color:var(--orange)"></i> A · Scanner les QR des stagiaires</h3><p class="xs muted">Ouvrez ce lien sur le téléphone de l'agent d'accueil : il scanne le QR personnel de chaque stagiaire.</p>
+<div class="copy"><input id="u1" readonly value="{{ scan_url }}"><button type="button" class="btn sm ghost" data-copy="u1"><i class="bi bi-clipboard"></i></button><a class="btn sm o" href="{{ scan_url }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i></a></div></div>
+<div class="card"><h3><i class="bi bi-display" style="color:var(--orange)"></i> B · QR projeté en salle</h3><p class="xs muted">Affichez ce QR (il change toutes les {{ 45 }} s) : chaque stagiaire le scanne et saisit son téléphone.</p>
+<div class="copy"><input id="u2" readonly value="{{ room_url }}"><button type="button" class="btn sm ghost" data-copy="u2"><i class="bi bi-clipboard"></i></button><a class="btn sm o" href="{{ room_url }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i></a></div></div>
+<div class="card"><h3><i class="bi bi-123" style="color:var(--orange)"></i> C · Codes (en ligne)</h3><p class="xs muted">Annoncez le code dans le chat ; les stagiaires le saisissent sur <a href="{{ presence_url }}" target="_blank">la page de présence</a>.</p>
+<div class="row"><span style="font-size:22px;font-weight:800;letter-spacing:3px">{{ s.code_in }}</span><span class="xs muted">entrée</span>{% if fo.check_mode=='inout' %}<span style="font-size:22px;font-weight:800;letter-spacing:3px;margin-left:10px">{{ s.code_out }}</span><span class="xs muted">sortie</span>{% endif %}
+<form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn sm ghost" name="form_action" value="gen_codes" title="Nouveaux codes"><i class="bi bi-arrow-repeat"></i></button></form></div></div>
+</div>
+
+<div class="card"><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Feuille de présence</h2>
+<div class="row"><button class="btn sm ghost" name="form_action" value="all_present" formnovalidate>Tous présents (non pointés)</button><button type="button" class="btn sm ghost" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i></button></div></div>
+<div style="margin-bottom:10px"><label>Thème / contenu de la séance</label><input name="topic" value="{{ s.topic or '' }}"></div>
+<div class="tw"><table><tr><th>Stagiaire</th><th>Statut</th><th>Entrée</th>{% if fo.check_mode=='inout' %}<th>Sortie</th>{% endif %}<th>Via</th></tr>
+{% for e in enrs %}{% set a = att.get(e.id) %}<tr><td><b>{{ e.student.full_name }}</b></td>
+<td><div class="att-opts">{% for k, lab in (('present','Présent'),('late','Retard'),('absent','Absent'),('excused','Excusé')) %}<label><input type="radio" name="st_{{ e.id }}" value="{{ k }}" {{ 'checked' if a and a.status==k }}><span class="{{ k }}">{{ lab }}</span></label>{% endfor %}</div></td>
+<td class="small">{{ a.checkin_at|hm if a }}</td>{% if fo.check_mode=='inout' %}<td class="small">{{ a.checkout_at|hm if a }}</td>{% endif %}<td class="xs muted">{{ L.get(a.method, '') if a and a.method }}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">Aucun stagiaire confirmé.</td></tr>{% endfor %}</table></div>
+<div style="margin-top:12px"><button class="btn o"><i class="bi bi-save"></i> Enregistrer</button> <span class="xs muted">Les pointages QR s'ajoutent automatiquement ; rechargez pour les voir.</span></div></form></div>
+{% endblock %}

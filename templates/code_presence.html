@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% set public = true %}{% block public %}<div class="card"><div class="xs muted">{{ fo.title }}</div><h1>Présence en ligne</h1>
+<p class="small muted">Saisissez votre téléphone (ou email) et le code annoncé par le formateur.</p>
+{% if result %}<div class="flash {{ result[0] }}" style="text-align:center">{{ result[1] }}</div>{% endif %}
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="fields" style="grid-template-columns:1fr">
+<div><label>Téléphone ou email</label><input name="contact" value="{{ contact }}" required></div>
+<div><label>Code à 4 chiffres</label><input name="code" inputmode="numeric" maxlength="4" required style="font-size:22px;letter-spacing:6px;text-align:center"></div>
+<button class="btn o" style="justify-content:center;min-height:48px">Valider ma présence</button></div></form></div>{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}Scanner — {{ fo.title }}{% endblock %}
+{% block public %}<div class="card"><div class="xs muted">{{ fo.title }} · {{ s.day|d }} · {{ s.time_label or fo.default_time_label() }}</div>
+<h1><i class="bi bi-qr-code-scan" style="color:var(--orange)"></i> Scanner les présences</h1><p class="small muted">Scannez le QR code personnel de chaque stagiaire.</p>
+{% if fo.check_mode == 'inout' %}<div class="row" style="margin-bottom:10px"><button type="button" class="btn dir" data-dir="in" style="flex:1">➡ Entrée</button><button type="button" class="btn ghost dir" data-dir="out" style="flex:1">⬅ Sortie</button></div>{% endif %}
+<div id="reader" style="width:100%;border-radius:12px;overflow:hidden"></div>
+<button id="start" type="button" class="btn o" style="width:100%;margin-top:10px;min-height:50px;font-size:16px;justify-content:center">Démarrer la caméra</button>
+<div id="flash" class="flash" style="display:none;margin-top:12px;text-align:center;font-size:16px"></div>
+<h3 style="margin-top:14px">Derniers scans</h3><div id="log" class="small"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script>(function(){var dir='in',last={c:'',t:0};
+document.querySelectorAll('.dir').forEach(function(b){b.onclick=function(){dir=b.dataset.dir;document.querySelectorAll('.dir').forEach(function(x){x.classList.toggle('ghost',x!==b)})}});
+function show(ok,txt){var f=document.getElementById('flash');f.style.display='block';f.className='flash '+(ok?'success':'error');f.textContent=txt;try{navigator.vibrate&&navigator.vibrate(ok?80:[60,40,60])}catch(e){}}
+function onScan(text){var n=Date.now();if(text===last.c&&n-last.t<4000)return;last={c:text,t:n};
+fetch('{{ url_for("scan_check", token=token) }}',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token() }}'},body:JSON.stringify({code:text,dir:dir})})
+.then(function(r){return r.json()}).then(function(d){var l=(d.name?d.name+' — ':'')+d.message;show(d.ok,l);var div=document.createElement('div');div.style.cssText='padding:6px 0;border-top:1px solid #e2e8f0;color:'+(d.ok?'#15803d':'#b91c1c');div.textContent=(dir==='out'?'⬅ ':'➡ ')+l;var g=document.getElementById('log');g.insertBefore(div,g.firstChild)}).catch(function(){show(false,'Erreur réseau')})}
+document.getElementById('start').onclick=function(){var q=new Html5Qrcode('reader');this.style.display='none';q.start({facingMode:'environment'},{fps:10,qrbox:{width:240,height:240}},onScan).catch(function(e){show(false,String(e))})};})();</script>
+{% endblock %}

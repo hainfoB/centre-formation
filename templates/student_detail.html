@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block content %}
+{% set csrf %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endset %}
+<div class="head"><div><div class="small muted"><a href="{{ url_for('students') }}">Stagiaires</a> /</div><h1>{{ st.full_name }}</h1><div class="small muted">{{ st.phone or '' }} {{ st.email or '' }}</div></div></div>
+<div class="card" style="padding:12px 16px"><label>Lien de l'espace parents (suivi présences, paiements, attestations)</label>
+<div class="copy"><input id="pl" readonly value="{{ parent_url }}"><button type="button" class="btn sm ghost" data-copy="pl"><i class="bi bi-clipboard"></i></button>
+{% if st.parent_phone %}<a class="btn sm wa" target="_blank" href="{{ wa(st.parent_phone, 'Bonjour, voici le lien pour suivre la formation de ' ~ st.first_name ~ ' (présences, paiements) : ' ~ parent_url ~ ' — ' ~ centre.centre_name) }}"><i class="bi bi-whatsapp"></i> Envoyer</a>{% endif %}
+<form method="post" class="inline">{{ csrf }}<button class="btn sm ghost" name="action" value="new_parent_link" title="Révoquer et générer un nouveau lien" onclick="return confirm('L\'ancien lien ne fonctionnera plus. Continuer ?')"><i class="bi bi-arrow-repeat"></i></button></form></div></div>
+
+{% for d in data %}{% set e = d.enr %}<div class="card"><div class="row" style="justify-content:space-between">
+<div><a href="{{ url_for('formation_detail', fid=e.formation_id) }}"><b>{{ e.formation.title }}</b></a> <span class="badge b-{{ e.status }}">{{ L[e.status] }}</span></div>
+<div class="row"><a class="btn sm ghost" href="{{ url_for('ticket', token=e.token) }}" target="_blank"><i class="bi bi-qr-code"></i> Espace / QR</a>
+{% if not e.formation.is_free %}<a class="btn sm ghost" href="{{ url_for('payments_view', fid=e.formation_id) }}#e{{ e.id }}"><i class="bi bi-cash"></i> Paiements</a>{% endif %}
+{% if d.cert[0] %}<a class="btn sm o" href="{{ url_for('certificate_admin', eid=e.id) }}"><i class="bi bi-award"></i> Attestation</a>{% else %}<span class="xs muted" title="{{ d.cert[1] }}"><i class="bi bi-award"></i> {{ d.cert[1] }}</span>{% endif %}</div></div>
+<div class="grid g4" style="margin-top:10px"><div><span class="xs muted">Assiduité</span><div><b>{{ d.att.rate }} %</b> <span class="xs muted">{{ d.att.attended }} prés. · {{ d.att.late }} ret. · {{ d.att.absent }} abs.</span></div></div>
+{% if not e.formation.is_free %}<div><span class="xs muted">Payé</span><div><b>{{ d.money.paid|da }}</b> / {{ d.money.expected|da }}</div></div>
+<div><span class="xs muted">Reste</span><div><b>{{ d.money.remaining|da }}</b>{% if d.money.overdue %} <span class="badge b-overdue">retard {{ d.money.overdue|da }}</span>{% endif %}</div></div>{% endif %}</div></div>
+{% else %}<div class="card muted">Aucune inscription.</div>{% endfor %}
+
+<div class="card"><h2>Inscrire à une formation</h2>{% for fo in open_formations %}{% if not st.enrollments.filter_by(formation_id=fo.id).first() %}
+<form method="post" action="{{ url_for('formation_action', fid=fo.id) }}" class="row" style="padding:6px 0;border-bottom:1px solid var(--line)">{{ csrf }}<input type="hidden" name="action" value="enr_add"><input type="hidden" name="student_id" value="{{ st.id }}">
+<span style="flex:1">{{ fo.title }} <span class="xs muted">{{ L[fo.status] }}{% if not fo.is_free %} · {{ fo.total_cost|da }}{% endif %}</span></span>{% if not fo.is_free %}<input type="number" name="discount" placeholder="Remise DA" style="width:120px">{% endif %}<button class="btn sm o">Inscrire</button></form>{% endif %}{% endfor %}</div>
+
+<details class="card" open><summary>Fiche du stagiaire</summary><form method="post" style="margin-top:12px">{{ csrf }}<input type="hidden" name="action" value="save">{% include "_student_fields.html" %}
+<div class="row" style="margin-top:12px;justify-content:space-between"><button class="btn o">Enregistrer</button></div></form>
+<form method="post" style="margin-top:8px">{{ csrf }}<button class="btn sm red" name="action" value="delete" onclick="return confirm('Supprimer ce stagiaire et ses inscriptions ?')"><i class="bi bi-trash"></i> Supprimer</button></form></details>
+{% endblock %}

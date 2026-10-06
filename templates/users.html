@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block content %}<div class="head"><h1>Utilisateurs</h1></div>
+<div class="card"><table><tr><th>Nom</th><th>Email</th><th>Rôle</th><th></th></tr>{% for u in items %}<tr><td><b>{{ u.name }}</b>{% if not u.active %} <span class="badge b-cancelled">désactivé</span>{% endif %}</td><td class="small">{{ u.email }}</td><td>{{ L[u.role] }}</td>
+<td class="nowrap"><form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="user_id" value="{{ u.id }}">
+<button class="btn sm ghost" name="action" value="reset" onclick="return confirm('Générer un nouveau mot de passe ?')">Nouveau mot de passe</button>{% if u.id != current_user.id %}<button class="btn sm ghost" name="action" value="toggle">{{ 'Désactiver' if u.active else 'Réactiver' }}</button>{% endif %}</form></td></tr>{% endfor %}</table></div>
+<div class="card"><h2>Ajouter un compte</h2><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="fields">
+<div><label>Nom</label><input name="name" required></div><div><label>Email</label><input type="email" name="email" required></div>
+<div><label>Rôle</label><select name="role"><option value="secretaire">Secrétariat (tout sauf paramètres)</option><option value="formateur">Formateur (présences de ses formations)</option><option value="admin">Administrateur</option></select></div>
+<div><label>Mot de passe (vide = généré)</label><input name="password"></div></div><div style="margin-top:12px"><button class="btn o">Créer</button></div></form></div>
+<div class="card"><h2>Journal d'activité</h2><div class="tw"><table>{% for l in logs %}<tr><td class="xs nowrap muted">{{ l.created_at.strftime('%d/%m %H:%M') }}</td><td class="small">{{ l.user }}</td><td class="small">{{ l.action }}</td><td class="xs muted">{{ l.details or '' }}</td></tr>{% endfor %}</table></div></div>
+{% endblock %}

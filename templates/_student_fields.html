@@ -1,0 +1,14 @@
+<div class="fields">
+<div><label>Nom *</label><input name="last_name" value="{{ st.last_name if st else '' }}" required></div>
+<div><label>Prénom *</label><input name="first_name" value="{{ st.first_name if st else '' }}" required></div>
+<div><label>Téléphone</label><input name="phone" value="{{ st.phone or '' if st }}"></div>
+<div><label>Email</label><input type="email" name="email" value="{{ st.email or '' if st }}"></div>
+<div><label>Date de naissance</label><input type="date" name="birth_date" value="{{ st.birth_date or '' if st }}"></div>
+<div><label>Lieu de naissance</label><input name="birth_place" value="{{ st.birth_place or '' if st }}"></div>
+<div><label>Niveau d'études</label><input name="level" value="{{ st.level or '' if st }}"></div>
+<div><label>Adresse</label><input name="address" value="{{ st.address or '' if st }}"></div>
+<div><label>Parent / tuteur</label><input name="parent_name" value="{{ st.parent_name or '' if st }}"></div>
+<div><label>Tél. parent</label><input name="parent_phone" value="{{ st.parent_phone or '' if st }}"></div>
+<div><label>Email parent</label><input type="email" name="parent_email" value="{{ st.parent_email or '' if st }}"></div>
+<div class="full"><label>Notes internes</label><textarea name="notes" rows="2">{{ st.notes or '' if st }}</textarea></div>
+</div>

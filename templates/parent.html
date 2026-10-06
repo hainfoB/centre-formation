@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}Espace parents — {{ st.first_name }}{% endblock %}
+{% block public %}<div class="hero"><div class="xs" style="opacity:.75">Espace parents</div><h1>{{ st.first_name }} {{ st.last_name }}</h1><div class="small" style="opacity:.85">Suivi des présences, des paiements et des attestations</div></div>
+{% for d in data %}{% set e = d.enr %}{% set fo = d.fo %}<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ fo.title }}</h2><span class="badge b-{{ e.status }}">{{ L[e.status] }}</span></div>
+<div class="grid g3" style="margin:12px 0"><div class="kpi"><span>Assiduité</span><b>{{ d.row.rate }} %</b></div><div class="kpi"><span>Absences / retards</span><b>{{ d.row.absent }} / {{ d.row.late }}</b></div>
+{% if d.money.pays %}<div class="kpi o"><span>Reste à payer</span><b>{{ d.money.remaining|da }}</b></div>{% endif %}</div>
+{% if d.absences %}<h3>Absences et retards</h3><div class="small">{% for s, a in d.absences %}<div>{{ s.day|d }} — <span class="badge b-{{ a.status }}">{{ L[a.status] }}</span>{% if a.checkin_at %} arrivée {{ a.checkin_at|hm }}{% endif %}</div>{% endfor %}</div>{% endif %}
+{% if d.next %}<h3 style="margin-top:12px">Prochaines séances</h3><div class="small">{% for s in d.next %}<div>{{ s.day|d }} · {{ s.time_label or fo.default_time_label() }}</div>{% endfor %}</div>{% endif %}
+{% if d.money.pays %}<h3 style="margin-top:12px">Paiements</h3><div class="tw"><table>{% for p in d.money.pays %}{% set stt = state(p) %}<tr><td class="nowrap">{{ p.due_on|d }}</td><td class="small">{{ p.label }}</td><td class="right nowrap">{{ p.amount|da }}</td><td><span class="badge b-{{ stt }}">{{ L[stt] }}</span>{% if p.receipt_no %} <span class="xs muted">{{ p.receipt_no }}</span>{% endif %}</td></tr>{% endfor %}</table></div>
+<p class="xs muted" style="white-space:pre-line">{{ fo.payment_info or centre.payment_info }}</p>{% endif %}
+{% if d.cert[0] and fo.status == 'done' %}<a class="btn o" href="{{ url_for('certificate_public', token=e.token) }}"><i class="bi bi-award"></i> Attestation</a>{% endif %}</div>
+{% else %}<div class="card muted">Aucune inscription en cours.</div>{% endfor %}
+{% if centre.centre_phone %}<p class="center small">Une question ? Contactez le secrétariat : <b>{{ centre.centre_phone }}</b></p>{% endif %}{% endblock %}

@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}Formations — {{ centre.centre_name }}{% endblock %}
+{% block public %}<div class="hero"><h1>Nos formations</h1><p style="opacity:.85;margin:6px 0 0">{{ centre.centre_tagline }}</p></div>
+{% for fo in items %}<a href="{{ url_for('public_form', slug=fo.slug) }}" class="card" style="display:block;text-decoration:none;color:inherit">
+<div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ fo.title }}</h2><span class="badge b-{{ fo.status }}">{{ 'Inscriptions ouvertes' if fo.status=='open' else 'En cours' }}</span></div>
+<p class="small muted" style="margin:6px 0">{{ (fo.description or '')[:180] }}</p>
+<div class="row small"><span><i class="bi bi-calendar3"></i> {{ fo.starts_on|d }}</span>{% if fo.hours_total %}<span><i class="bi bi-clock"></i> {{ fo.hours_total }} h</span>{% endif %}<span><i class="bi bi-geo-alt"></i> {{ L[fo.mode] }}</span>
+<b style="color:var(--orange)">{% if fo.is_free %}Gratuite{% else %}{{ fo.total_cost|da }}{% endif %}</b></div></a>
+{% else %}<div class="card muted">Aucune formation ouverte pour le moment.</div>{% endfor %}{% endblock %}

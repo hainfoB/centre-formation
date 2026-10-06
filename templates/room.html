@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}Présence — {{ fo.title }}{% endblock %}
+{% block public %}<div class="center"><div class="small muted">{{ fo.title }} · {{ s.day|d }}</div><h1 style="font-size:clamp(24px,4vw,36px)">Scannez pour signer votre présence</h1>
+{% if fo.check_mode == 'inout' %}<div class="row" style="justify-content:center;margin:10px 0"><button type="button" class="btn dir" data-dir="in">➡ Entrée</button><button type="button" class="btn ghost dir" data-dir="out">⬅ Sortie</button></div>{% endif %}
+<div id="qr" style="display:inline-block;padding:14px;border:5px solid var(--navy);border-radius:22px;background:#fff;width:min(80vw,460px);min-height:220px;margin-top:10px"></div>
+<p class="muted">Le code change toutes les {{ window }} secondes : un QR photographié et partagé ne fonctionne pas.</p></div>
+<style>#qr svg{width:100%;height:auto;display:block}</style>
+<script>(function(){var dir='in',u='{{ url_for("room_qr", token=token) }}';
+document.querySelectorAll('.dir').forEach(function(b){b.onclick=function(){dir=b.dataset.dir;document.querySelectorAll('.dir').forEach(function(x){x.classList.toggle('ghost',x!==b)});load()}});
+function load(){fetch(u+'?dir='+dir,{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){document.getElementById('qr').innerHTML=d.svg}).catch(function(){})}
+load();setInterval(load,{{ window * 1000 // 3 }});})();</script>{% endblock %}

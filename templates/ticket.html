@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}Mon espace — {{ fo.title }}{% endblock %}
+{% block public %}<div class="hero"><div class="xs" style="opacity:.75">Espace stagiaire</div><h1>{{ st.first_name }} {{ st.last_name }}</h1><div>{{ fo.title }} <span class="chip">{{ L[enr.status] }}</span></div></div>
+{% if enr.status == 'confirmed' %}
+<div class="card center"><h2>Mon QR code de présence</h2><div class="qr">{{ qr|safe }}</div><p class="small muted">Présentez-le à l'entrée de chaque séance.</p>
+{% if today_seance %}<form method="post" action="{{ url_for('ticket_code', token=enr.token) }}" class="row" style="justify-content:center;margin-top:8px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input name="code" maxlength="4" inputmode="numeric" placeholder="Code séance" style="width:140px;text-align:center;letter-spacing:4px"><button class="btn sm o">Valider</button></form><div class="xs muted">Séance en ligne : saisissez le code annoncé.</div>{% endif %}
+{% if fo.online_url and fo.mode != 'onsite' %}<p><a class="btn" href="{{ fo.online_url }}" target="_blank"><i class="bi bi-camera-video"></i> Rejoindre la séance en ligne</a></p>{% endif %}
+{% if fo.group_url %}<p><a class="btn wa" href="{{ fo.group_url }}" target="_blank"><i class="bi bi-people"></i> Groupe de la formation</a></p>{% endif %}</div>
+<div class="card"><h2>Mes séances <span class="small muted">— assiduité {{ row.rate }} %</span></h2><div class="tw"><table>
+{% for s in seances %}{% set a = row.marks.get(s.id) %}<tr><td class="nowrap">{{ s.day|d }}</td><td class="small">{{ s.time_label or fo.default_time_label() }} {{ s.topic or '' }}</td>
+<td>{% if a and a.status %}<span class="badge b-{{ a.status }}">{{ L[a.status] }}</span>{% elif s.day < today %}<span class="badge b-absent">Absent</span>{% elif s.day == today %}<span class="badge b-open">Aujourd'hui</span>{% endif %}</td></tr>{% endfor %}</table></div></div>
+{% if money.pays %}<div class="card"><h2>Mes paiements</h2><p class="small">Payé <b>{{ money.paid|da }}</b> sur {{ money.expected|da }} — reste <b>{{ money.remaining|da }}</b></p>
+<div class="tw"><table>{% for p in money.pays %}{% set stt = state(p) %}<tr><td class="nowrap">{{ p.due_on|d }}</td><td class="small">{{ p.label }}</td><td class="right nowrap">{{ p.amount|da }}</td><td><span class="badge b-{{ stt }}">{{ L[stt] }}</span></td></tr>{% endfor %}</table></div>
+<p class="xs muted" style="white-space:pre-line">{{ fo.payment_info or centre.payment_info }}</p></div>{% endif %}
+<div class="card"><h2><i class="bi bi-award" style="color:var(--orange)"></i> Attestation</h2>
+{% if cert[0] and fo.status == 'done' %}<a class="btn o" href="{{ url_for('certificate_public', token=enr.token) }}"><i class="bi bi-download"></i> Télécharger mon attestation</a>
+{% elif cert[0] %}<p class="small">Conditions remplies : l'attestation sera disponible à la fin de la formation.</p>{% else %}<p class="small muted">Attestation pas encore disponible : {{ cert[1]|lower }}.</p>{% endif %}</div>
+{% else %}<div class="card center muted">{% if enr.status == 'pending' %}Votre inscription est en attente de validation par le secrétariat.{% elif enr.status == 'waitlist' %}Vous êtes sur liste d'attente.{% else %}Cette inscription est annulée.{% endif %}</div>{% endif %}
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}{% block content %}
+{% set csrf %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endset %}
+<div class="head"><div><div class="small muted"><a href="{{ url_for('formation_detail', fid=fo.id) }}">{{ fo.title }}</a> /</div><h1>Paiements</h1>
+<div class="small muted">{% if fo.registration_fee %}Inscription {{ fo.registration_fee|da }} + {% endif %}{{ fo.price_total|da }} en {{ fo.installments }} mensualité(s) · rappels automatiques J-3, J, J+3, J+10</div></div>
+<a class="btn ghost" href="{{ url_for('export', fid=fo.id, kind='paiements') }}"><i class="bi bi-file-earmark-excel"></i> Export</a></div>
+<div class="grid g4" style="margin-bottom:16px"><div class="kpi"><span>Attendu</span><b>{{ tot.expected|da }}</b></div><div class="kpi o"><span>Encaissé</span><b>{{ tot.paid|da }}</b></div>
+<div class="kpi"><span>Reste</span><b>{{ tot.remaining|da }}</b></div><div class="kpi" style="border-top-color:#dc2626"><span>En retard</span><b>{{ tot.overdue|da }}</b></div></div>
+{% for r in rows %}{% set e = r.enr %}{% set st = e.student %}
+<div class="card" id="e{{ e.id }}"><details {{ 'open' if r.overdue }}><summary><div class="row" style="justify-content:space-between">
+<div><b>{{ st.full_name }}</b> <span class="xs muted">{{ st.phone or '' }}{% if st.parent_phone %} · parent {{ st.parent_phone }}{% endif %}</span></div>
+<div class="row small"><span>{{ r.paid|da }} / {{ r.expected|da }}</span>{% if r.overdue %}<span class="badge b-overdue">retard {{ r.overdue|da }}</span>{% elif r.remaining == 0 and r.expected %}<span class="badge b-paid">soldé</span>{% endif %}<i class="bi bi-chevron-down"></i></div></div></summary>
+<div class="tw" style="margin-top:10px"><table><tr><th>Échéance</th><th>Libellé</th><th class="right">Montant</th><th>État</th><th>Action</th></tr>
+{% for p in r.pays %}{% set stt = state(p) %}<tr><td class="nowrap">{{ p.due_on|d }}</td><td class="small">{{ p.label }}{% if p.reminders %}<div class="xs muted">rappels : {{ p.reminders }}</div>{% endif %}</td><td class="right nowrap"><b>{{ p.amount|da }}</b></td>
+<td><span class="badge b-{{ stt }}">{{ L[stt] }}</span>{% if p.status=='paid' %}<div class="xs muted">{{ p.paid_on|d }} · {{ L.get(p.method,'') }} · {{ p.receipt_no }}</div>{% endif %}</td>
+<td>{% if p.status == 'due' %}
+<form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="row">{{ csrf }}<input type="hidden" name="action" value="paid">
+<input type="number" name="amount" value="{{ p.amount }}" style="width:110px" title="Montant reçu (partiel possible)"><select name="method" style="width:auto">{% for m in pay_methods %}<option value="{{ m }}">{{ L[m] }}</option>{% endfor %}</select>
+<input type="date" name="paid_on" value="{{ today }}" style="width:auto"><label class="check xs"><input type="checkbox" name="notify" checked> email</label><label class="check xs"><input type="checkbox" name="print" checked> reçu</label>
+<button class="btn sm green"><i class="bi bi-cash"></i> Encaisser</button></form>
+<div class="row" style="margin-top:6px">
+<form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="inline">{{ csrf }}<button class="btn sm ghost" name="action" value="remind" title="Relance email"><i class="bi bi-envelope"></i></button><button class="btn sm ghost" name="action" value="waive" onclick="return confirm('Exonérer cette échéance ?')">Exonérer</button></form>
+{% set msg = 'Bonjour, rappel : le paiement « ' ~ p.label ~ ' » de ' ~ fmt_da(p.amount) ~ ' pour la formation ' ~ fo.title ~ ' (' ~ st.first_name ~ ') ' ~ ('était dû le ' if stt=='overdue' else 'est dû le ') ~ (p.due_on|d) ~ '. Détail : ' ~ base ~ '/t/' ~ e.token ~ ' — ' ~ centre.centre_name %}
+{% if st.phone %}<a class="btn sm wa" target="_blank" href="{{ wa(st.phone, msg) }}"><i class="bi bi-whatsapp"></i> stagiaire</a>{% endif %}{% if st.parent_phone %}<a class="btn sm wa" target="_blank" href="{{ wa(st.parent_phone, msg) }}"><i class="bi bi-whatsapp"></i> parent</a>{% endif %}
+<details style="display:inline-block"><summary class="btn sm ghost">Modifier</summary><form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="row" style="margin-top:6px">{{ csrf }}<input type="hidden" name="action" value="edit"><input type="number" name="amount" value="{{ p.amount }}" style="width:110px"><input type="date" name="due_on" value="{{ p.due_on }}" style="width:auto"><button class="btn sm">OK</button></form></details></div>
+{% elif p.status == 'paid' %}<a class="btn sm ghost" href="{{ url_for('receipt', pid=p.id) }}" target="_blank"><i class="bi bi-printer"></i> Reçu</a>
+<form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="inline">{{ csrf }}<button class="btn sm red" name="action" value="undo" onclick="return confirm('Annuler cet encaissement ?')">Annuler</button></form>
+{% else %}<form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="inline">{{ csrf }}<button class="btn sm ghost" name="action" value="undo">Rétablir</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="5" class="muted small">Pas d'échéancier.</td></tr>{% endfor %}</table></div>
+<div class="row" style="margin-top:8px"><form method="post" action="{{ url_for('formation_action', fid=fo.id) }}" class="row">{{ csrf }}<input type="hidden" name="enrollment_id" value="{{ e.id }}"><span class="xs muted">Remise :</span><input type="number" name="discount" value="{{ e.discount or 0 }}" style="width:100px"><button class="btn sm ghost" name="action" value="enr_discount">Appliquer</button></form>
+<form method="post" action="{{ url_for('regen_schedule', eid=e.id) }}" class="inline">{{ csrf }}<button class="btn sm ghost" onclick="return confirm('Recalculer l\'échéancier ?')"><i class="bi bi-arrow-repeat"></i> Recalculer</button></form></div>
+</details></div>
+{% else %}<div class="card muted">Aucun inscrit confirmé.</div>{% endfor %}
+{% endblock %}

@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% set public = true %}{% block public %}<div class="card"><div class="xs muted">{{ fo.title }} · {{ s.day|d }}</div>
+<h1>{{ 'Signer ma sortie' if direction=='out' else 'Signer ma présence' }}</h1>
+{% if result %}<div class="flash {{ result[0] }}" style="font-size:16px;text-align:center">{{ result[1] }}</div>{% endif %}
+{% if expired %}<div class="flash error">Ce QR a expiré. Scannez à nouveau le code affiché en salle.</div>
+{% elif not result or result[0] == 'error' %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Votre téléphone ou email (celui de l'inscription)</label><input name="contact" value="{{ contact }}" required inputmode="tel" style="font-size:17px">
+<button class="btn o" style="width:100%;margin-top:12px;min-height:50px;justify-content:center;font-size:16px">Valider</button></form>{% endif %}</div>{% endblock %}

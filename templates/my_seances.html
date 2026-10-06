@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block content %}<div class="head"><h1>Séances & présences</h1></div>
+<div class="card"><div class="tw"><table><tr><th>Date</th><th>Formation</th><th>Horaire</th><th></th></tr>
+{% for s in seances %}<tr><td class="nowrap"><b>{{ s.day|d }}</b>{% if s.day == today %} <span class="badge b-open">aujourd'hui</span>{% endif %}</td><td>{{ s.formation.title }}<div class="xs muted">{{ s.topic or '' }}</div></td>
+<td class="small">{{ s.time_label or s.formation.default_time_label() }}</td><td><a class="btn sm {{ 'o' if s.day==today else 'ghost' }}" href="{{ url_for('seance_view', sid=s.id) }}">Ouvrir</a></td></tr>
+{% else %}<tr><td colspan="4" class="muted">Aucune séance.</td></tr>{% endfor %}</table></div></div>{% endblock %}

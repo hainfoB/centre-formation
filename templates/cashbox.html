@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block content %}<div class="head"><h1>Caisse</h1>
+<form class="row"><input type="date" name="du" value="{{ d1 }}" style="width:auto"><input type="date" name="au" value="{{ d2 }}" style="width:auto"><button class="btn sm">Filtrer</button><button class="btn sm ghost" name="export" value="1"><i class="bi bi-file-earmark-excel"></i> Export</button></form></div>
+<div class="grid g4" style="margin-bottom:16px"><div class="kpi o"><span>Total encaissé</span><b>{{ total|da }}</b></div>{% for m, v in by_method.items() %}<div class="kpi"><span>{{ L.get(m, m) }}</span><b>{{ v|da }}</b></div>{% endfor %}</div>
+<div class="card"><div class="tw"><table><tr><th>Date</th><th>Reçu</th><th>Stagiaire</th><th>Formation</th><th>Mode</th><th class="right">Montant</th><th>Par</th></tr>
+{% for p in pays %}<tr><td class="nowrap">{{ p.paid_on|d }}</td><td><a href="{{ url_for('receipt', pid=p.id) }}" target="_blank">{{ p.receipt_no }}</a></td><td>{{ p.enrollment.student.full_name }}</td><td class="small">{{ p.enrollment.formation.title }}<div class="xs muted">{{ p.label }}</div></td>
+<td class="small">{{ L.get(p.method, p.method) }}</td><td class="right nowrap"><b>{{ p.amount|da }}</b></td><td class="xs muted">{{ p.collected_by or '' }}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Aucun encaissement sur la période.</td></tr>{% endfor %}</table></div></div>{% endblock %}

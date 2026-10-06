@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ fo.title }}{% endblock %}
+{% block public %}
+<div class="hero"><div class="xs" style="opacity:.75">{{ centre.centre_name }}</div><h1>{{ fo.title }}</h1>
+<div>{% if fo.starts_on %}<span class="chip"><i class="bi bi-calendar3"></i> {{ fo.starts_on|d }}{% if fo.ends_on %} → {{ fo.ends_on|d }}{% endif %}</span>{% endif %}
+{% if fo.default_time_label() %}<span class="chip"><i class="bi bi-clock"></i> {{ fo.default_time_label() }}</span>{% endif %}
+{% if fo.hours_total %}<span class="chip">{{ fo.hours_total }} h</span>{% endif %}<span class="chip"><i class="bi bi-geo-alt"></i> {{ fo.location if fo.mode != 'online' and fo.location else L[fo.mode] }}</span>
+<span class="chip" style="background:var(--orange)">{% if fo.is_free %}Gratuite{% else %}{{ fo.total_cost|da }}{% if fo.installments > 1 %} · {{ fo.installments }} mensualités{% endif %}{% endif %}</span></div></div>
+
+{% if done %}<div class="card center">
+{% if done == 'confirmed' %}<h2 style="color:var(--ok)"><i class="bi bi-check-circle-fill"></i> Inscription confirmée !</h2><p>Votre espace personnel contient votre QR code de présence et votre planning.</p><a class="btn o" href="{{ url_for('ticket', token=enr.token) }}">Ouvrir mon espace</a>
+{% elif done == 'pending' %}<h2><i class="bi bi-hourglass-split" style="color:var(--orange)"></i> Demande enregistrée</h2><p>Le secrétariat vous contactera pour finaliser l'inscription{% if not fo.is_free %} (règlement des frais){% endif %}.</p>
+{% elif done == 'waitlist' %}<h2>Liste d'attente</h2><p>La formation est complète. Nous vous prévenons dès qu'une place se libère.</p>
+{% else %}<h2>Déjà inscrit(e)</h2><p>Vous êtes déjà inscrit(e) à cette formation.</p>{% endif %}</div>
+{% else %}
+{% if fo.description %}<div class="card"><p style="margin:0;white-space:pre-line">{{ fo.description }}</p></div>{% endif %}
+<div class="grid g2">{% if fo.programme_items() %}<div class="card"><h2>Programme</h2><ul style="margin:0;padding-left:18px">{% for i in fo.programme_items() %}<li>{{ i }}</li>{% endfor %}</ul></div>{% endif %}
+<div class="card">{% if fo.audience %}<h3>Public</h3><p class="small">{{ fo.audience }}</p>{% endif %}{% if fo.prerequisite_items() %}<h3>Prérequis</h3><ul class="small" style="padding-left:18px">{% for i in fo.prerequisite_items() %}<li>{{ i }}</li>{% endfor %}</ul>{% endif %}
+{% if fo.trainer %}<h3>Formateur</h3><p class="small">{{ fo.trainer }}</p>{% endif %}
+{% if not fo.is_free %}<h3>Tarif</h3><p class="small">{% if fo.registration_fee %}Frais d'inscription : {{ fo.registration_fee|da }}<br>{% endif %}Formation : {{ fo.price_total|da }}{% if fo.installments > 1 %} payable en {{ fo.installments }} mensualités{% endif %}</p>{% endif %}
+{% if fo.seats %}{% set left = fo.seats_left() %}<p class="small"><b>{% if left == 0 %}Complet — liste d'attente{% elif left <= 5 %}Plus que {{ left }} place(s) !{% else %}Places limitées{% endif %}</b></p>{% endif %}</div></div>
+{% if fo.status == 'open' %}<div class="card"><h2><i class="bi bi-pencil-square" style="color:var(--orange)"></i> Formulaire d'inscription</h2>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="website" style="display:none" tabindex="-1" autocomplete="off">
+<div class="fields"><div><label>Nom *</label><input name="last_name" value="{{ form.last_name }}" required></div><div><label>Prénom *</label><input name="first_name" value="{{ form.first_name }}" required></div>
+<div><label>Téléphone *</label><input name="phone" value="{{ form.phone }}" inputmode="tel" required></div><div><label>Email</label><input type="email" name="email" value="{{ form.email }}"></div>
+<div><label>Date de naissance</label><input type="date" name="birth_date" value="{{ form.birth_date }}"></div><div><label>Niveau d'études</label><input name="level" value="{{ form.level }}"></div>
+<div><label>Nom du parent / tuteur</label><input name="parent_name" value="{{ form.parent_name }}"></div><div><label>Téléphone du parent</label><input name="parent_phone" value="{{ form.parent_phone }}"></div>
+<div class="full"><label class="check"><input type="checkbox" name="consent" required> J'accepte que mes données soient utilisées par {{ centre.centre_name }} pour la gestion de ma formation.</label></div></div>
+<button class="btn o" style="margin-top:14px;min-height:48px;width:100%;justify-content:center;font-size:16px">{{ "M'inscrire sur la liste d'attente" if fo.seats and fo.seats_left() == 0 else "Je m'inscris" }}</button></form></div>
+{% else %}<div class="card center muted">Les inscriptions ne sont pas ouvertes pour cette formation.</div>{% endif %}
+{% endif %}{% endblock %}

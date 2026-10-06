@@ -1,0 +1,77 @@
+{% extends "base.html" %}{% block content %}
+{% set csrf %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endset %}
+<div class="head"><div><div class="small muted"><a href="{{ url_for('formations') }}">Formations</a> /</div><h1>{{ fo.title }}</h1>
+<div class="row small muted"><span class="badge b-{{ fo.status }}">{{ L[fo.status] }}</span> {{ L[fo.mode] }} · {% if fo.is_free %}Gratuite{% else %}{{ fo.total_cost|da }}{% endif %} · {{ fo.taken() }}{% if fo.seats %}/{{ fo.seats }}{% endif %} places</div></div>
+<div class="row"><form method="post" action="{{ url_for('formation_action', fid=fo.id) }}" class="row">{{ csrf }}<input type="hidden" name="action" value="status">
+<select name="status" style="width:auto">{% for s in statuses %}<option value="{{ s }}" {{ 'selected' if fo.status==s }}>{{ L[s] }}</option>{% endfor %}</select><button class="btn sm">OK</button></form>
+{% if not fo.is_free %}<a class="btn o" href="{{ url_for('payments_view', fid=fo.id) }}"><i class="bi bi-cash-stack"></i> Paiements</a>{% endif %}</div></div>
+
+<div class="card" style="padding:12px 16px"><div class="row" style="justify-content:space-between"><div style="flex:1;min-width:240px"><label>Lien d'inscription public {% if fo.status != 'open' %}<span class="badge b-pending">ouvrez les inscriptions pour l'activer</span>{% endif %}</label>
+<div class="copy"><input id="pub" readonly value="{{ public_url }}"><button type="button" class="btn sm ghost" data-copy="pub"><i class="bi bi-clipboard"></i></button><a class="btn sm ghost" href="{{ public_url }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i></a></div></div>
+<div class="row"><a class="btn sm ghost" href="{{ url_for('export', fid=fo.id, kind='inscrits') }}"><i class="bi bi-file-earmark-excel"></i> Inscrits</a>
+<a class="btn sm ghost" href="{{ url_for('export', fid=fo.id, kind='presences') }}"><i class="bi bi-file-earmark-excel"></i> Présences</a></div></div></div>
+
+<div class="tabs">{% for k, lab in (('inscrits','Inscrits'),('seances','Séances (' ~ stats.seances|length ~ ')'),('assiduite','Assiduité & attestations'),('infos','Paramètres')) %}<a href="?tab={{ k }}" class="{{ 'on' if tab==k }}">{{ lab }}</a>{% endfor %}</div>
+
+{% if tab == 'inscrits' %}
+<div class="card"><div class="tw"><table><tr><th>Stagiaire</th><th>Contact</th><th>Statut</th>{% if not fo.is_free %}<th class="right">Payé / dû</th>{% endif %}<th>Assiduité</th><th></th></tr>
+{% for e in enrollments %}{% set st = e.student %}{% set r = by_enr.get(e.id) %}{% set m = money.get(e.id) %}<tr>
+<td><a href="{{ url_for('student_detail', sid=st.id) }}"><b>{{ st.full_name }}</b></a><div class="xs muted">inscrit le {{ e.created_at|d }}{% if e.source %} · {{ e.source }}{% endif %}</div></td>
+<td class="small">{{ st.phone or '' }}<div class="xs muted">{{ st.email or '' }}</div></td>
+<td><span class="badge b-{{ e.status }}">{{ L[e.status] }}</span></td>
+{% if not fo.is_free %}<td class="right small nowrap">{% if m %}{{ m.paid|da }} / {{ m.expected|da }}{% if m.overdue %}<div><span class="badge b-overdue">retard {{ m.overdue|da }}</span></div>{% endif %}{% endif %}</td>{% endif %}
+<td style="min-width:90px">{% if r %}<div class="bar {{ 'ok' if r.eligible_att }}"><i style="width:{{ r.rate }}%"></i></div><span class="xs muted">{{ r.rate }} %</span>{% endif %}</td>
+<td class="nowrap"><form method="post" action="{{ url_for('formation_action', fid=fo.id) }}" class="inline">{{ csrf }}<input type="hidden" name="enrollment_id" value="{{ e.id }}">
+{% if e.status != 'confirmed' %}<button class="btn sm green" name="action" value="enr_confirm" title="Confirmer"><i class="bi bi-check2"></i></button>{% endif %}
+{% if e.status != 'cancelled' %}<button class="btn sm red" name="action" value="enr_cancel" title="Annuler" onclick="return confirm('Annuler cette inscription ?')"><i class="bi bi-x"></i></button>{% else %}
+<button class="btn sm red" name="action" value="enr_delete" title="Supprimer" onclick="return confirm('Supprimer définitivement ?')"><i class="bi bi-trash"></i></button>{% endif %}</form>
+<a class="btn sm ghost" href="{{ url_for('ticket', token=e.token) }}" target="_blank" title="Espace stagiaire / QR"><i class="bi bi-qr-code"></i></a></td></tr>
+{% else %}<tr><td colspan="6" class="muted">Aucun inscrit.</td></tr>{% endfor %}</table></div></div>
+<div class="card"><h2>Inscrire un stagiaire</h2>
+<form method="post" action="{{ url_for('formation_action', fid=fo.id) }}">{{ csrf }}<input type="hidden" name="action" value="enr_add"><input type="hidden" name="student_id" id="sid">
+<div class="fields"><div class="full" style="position:relative"><label>Stagiaire existant (recherche nom / téléphone)</label><input id="search" autocomplete="off" placeholder="Tapez au moins 2 lettres…"><div id="sug" class="card" style="position:absolute;z-index:5;left:0;right:0;display:none;padding:6px"></div></div>
+<div class="full xs muted">… ou nouveau stagiaire :</div>
+<div><label>Nom</label><input name="last_name"></div><div><label>Prénom</label><input name="first_name"></div><div><label>Téléphone</label><input name="phone"></div><div><label>Email</label><input name="email" type="email"></div>
+<div><label>Parent / tuteur</label><input name="parent_name"></div><div><label>Tél. parent</label><input name="parent_phone"></div>
+{% if not fo.is_free %}<div><label>Remise (DA)</label><input type="number" name="discount" value="0"></div>{% endif %}
+</div><div style="margin-top:12px"><button class="btn o"><i class="bi bi-person-plus"></i> Inscrire (confirmé)</button></div></form></div>
+<script>(function(){var i=document.getElementById('search'),b=document.getElementById('sug'),h=document.getElementById('sid'),t;
+i.oninput=function(){clearTimeout(t);h.value='';t=setTimeout(function(){if(i.value.length<2){b.style.display='none';return}
+fetch('{{ url_for("students_api") }}?q='+encodeURIComponent(i.value)).then(function(r){return r.json()}).then(function(d){b.innerHTML='';d.forEach(function(x){var a=document.createElement('div');a.textContent=x.label;a.style.cssText='padding:7px;cursor:pointer;border-radius:8px';a.onmouseover=function(){a.style.background='#eef4fb'};a.onmouseout=function(){a.style.background=''};a.onclick=function(){h.value=x.id;i.value=x.label;b.style.display='none'};b.appendChild(a)});b.style.display=d.length?'block':'none'})},250)}})();</script>
+
+{% elif tab == 'seances' %}
+<div class="card"><div class="tw"><table><tr><th>Date</th><th>Horaire</th><th>Thème</th><th>Présents</th><th></th></tr>
+{% for s in stats.seances %}{% set pres = s.attendances.filter_by(status='present').count() + s.attendances.filter_by(status='late').count() %}
+<tr><td class="nowrap"><b>{{ s.day|d }}</b> <span class="xs muted">{{ ['lun','mar','mer','jeu','ven','sam','dim'][s.day.weekday()] }}</span>{% if s.day == today %} <span class="badge b-open">aujourd'hui</span>{% endif %}</td>
+<td class="small">{{ s.time_label or fo.default_time_label() }}</td><td class="small">{{ s.topic or '' }}</td><td class="small">{{ pres if s.day <= today else '' }}</td>
+<td class="nowrap"><a class="btn sm {{ 'o' if s.day==today else 'ghost' }}" href="{{ url_for('seance_view', sid=s.id) }}"><i class="bi bi-check2-square"></i> Présences</a>
+<form method="post" action="{{ url_for('formation_action', fid=fo.id) }}" class="inline">{{ csrf }}<input type="hidden" name="seance_id" value="{{ s.id }}"><button class="btn sm red" name="action" value="del_seance" onclick="return confirm('Supprimer cette séance et ses présences ?')"><i class="bi bi-trash"></i></button></form></td></tr>
+{% else %}<tr><td colspan="5" class="muted">Aucune séance. Générez le planning ci-dessous.</td></tr>{% endfor %}</table></div></div>
+<div class="grid g2">
+<div class="card"><h2>Générer le planning</h2><form method="post" action="{{ url_for('formation_action', fid=fo.id) }}">{{ csrf }}<input type="hidden" name="action" value="gen_seances">
+<div class="fields"><div><label>Première date</label><input type="date" name="day" value="{{ fo.starts_on or '' }}" required></div><div><label>Nombre de séances</label><input type="number" name="count" value="8" min="1"></div>
+<div><label>Heure début</label><input type="time" name="start_time" value="{{ fo.start_time or '' }}"></div><div><label>Heure fin</label><input type="time" name="end_time" value="{{ fo.end_time or '' }}"></div>
+<div class="full"><label>Jours de la semaine</label><div class="row">{% for d in ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'] %}<label class="check" style="font-weight:600"><input type="checkbox" name="weekdays" value="{{ loop.index0 }}"> {{ d }}</label>{% endfor %}</div>
+<div class="xs muted">Sans jour coché : une séance tous les <input type="number" name="every_days" value="7" style="width:60px;padding:3px 6px"> jours.</div></div></div>
+<div style="margin-top:12px"><button class="btn o">Générer</button></div></form></div>
+<div class="card"><h2>Ajouter une séance</h2><form method="post" action="{{ url_for('formation_action', fid=fo.id) }}">{{ csrf }}<input type="hidden" name="action" value="add_seance">
+<div class="fields"><div><label>Date</label><input type="date" name="day" required></div><div><label>Début</label><input type="time" name="start_time" value="{{ fo.start_time or '' }}"></div><div><label>Fin</label><input type="time" name="end_time" value="{{ fo.end_time or '' }}"></div>
+<div class="full"><label>Thème</label><input name="topic"></div><div class="full"><label>Formateur (si différent)</label><input name="trainer"></div></div>
+<div style="margin-top:12px"><button class="btn">Ajouter</button></div></form></div></div>
+
+{% elif tab == 'assiduite' %}
+<div class="card"><div class="row" style="justify-content:space-between"><div><b>{{ stats.held|length }}</b> séances tenues · assiduité moyenne <b>{{ stats.avg }} %</b> · seuil attestation {{ fo.min_attendance }} %</div>
+{% if fo.status != 'done' %}<span class="xs muted">Les stagiaires pourront télécharger leur attestation quand la formation sera « Terminée ».</span>{% endif %}</div>
+<div class="tw" style="margin-top:10px"><table><tr><th>Stagiaire</th>{% for s in stats.held %}<th class="center" title="{{ s.day|d }}">{{ s.day.strftime('%d/%m') }}</th>{% endfor %}<th>Taux</th><th>Heures</th><th>Attestation</th></tr>
+{% for r in stats.rows %}<tr><td class="nowrap"><a href="{{ url_for('student_detail', sid=r.enr.student_id) }}">{{ r.enr.student.full_name }}</a></td>
+{% for s in stats.held %}{% set a = r.marks.get(s.id) %}<td class="center">{% if a and a.status=='present' %}<span style="color:var(--ok)">●</span>{% elif a and a.status=='late' %}<span style="color:var(--warn)" title="retard">◐</span>{% elif a and a.status=='excused' %}<span class="muted">E</span>{% else %}<span style="color:var(--err)">○</span>{% endif %}</td>{% endfor %}
+<td><b>{{ r.rate }} %</b></td><td class="small">{{ r.hours }} h</td>
+<td><a class="btn sm {{ 'o' if r.eligible_att else 'ghost' }}" href="{{ url_for('certificate_admin', eid=r.enr.id) }}{{ '' if r.eligible_att else '?force=1' }}" {% if not r.eligible_att %}onclick="return confirm('Assiduité sous le seuil. Générer quand même ?')"{% endif %}><i class="bi bi-award"></i> PDF</a></td></tr>
+{% else %}<tr><td class="muted">Aucun inscrit confirmé.</td></tr>{% endfor %}</table></div>
+<p class="xs muted">● présent · ◐ retard · E excusé · ○ absent / non pointé</p></div>
+
+{% else %}
+<div class="card"><form method="post" action="{{ url_for('formation_action', fid=fo.id) }}"><input type="hidden" name="action" value="edit">{% include "_formation_form.html" %}
+<div style="margin-top:14px"><button class="btn o">Enregistrer</button></div></form></div>
+{% endif %}
+{% endblock %}

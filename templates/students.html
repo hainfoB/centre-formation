@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block content %}<div class="head"><h1>Stagiaires</h1>
+<form class="row"><input name="q" value="{{ q }}" placeholder="Nom, téléphone, email…" style="width:260px"><button class="btn sm">Rechercher</button></form></div>
+<div class="card"><div class="tw"><table><tr><th>Nom</th><th>Téléphone</th><th>Parent</th><th>Formations</th></tr>
+{% for s in items %}<tr><td><a href="{{ url_for('student_detail', sid=s.id) }}"><b>{{ s.full_name }}</b></a><div class="xs muted">{{ s.email or '' }}</div></td><td class="small">{{ s.phone or '' }}</td>
+<td class="small">{{ s.parent_name or '' }}<div class="xs muted">{{ s.parent_phone or '' }}</div></td><td class="small">{% for e in s.enrollments %}{% if e.status != 'cancelled' %}<span class="badge b-{{ e.status }}">{{ e.formation.title[:28] }}</span> {% endif %}{% endfor %}</td></tr>
+{% else %}<tr><td colspan="4" class="muted">Aucun stagiaire.</td></tr>{% endfor %}</table></div></div>
+<details class="card"><summary><i class="bi bi-person-plus" style="color:var(--orange)"></i> Nouveau stagiaire</summary>
+<form method="post" style="margin-top:12px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% set st = none %}{% include "_student_fields.html" %}<div style="margin-top:12px"><button class="btn o">Créer</button></div></form></details>
+{% endblock %}

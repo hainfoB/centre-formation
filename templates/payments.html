@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% block content %}
 {% set csrf %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endset %}
 <div class="head"><div><div class="small muted"><a href="{{ url_for('formation_detail', fid=fo.id) }}">{{ fo.title }}</a> /</div><h1>Paiements</h1>
-<div class="small muted">{% if fo.registration_fee %}Inscription {{ fo.registration_fee|da }} + {% endif %}{{ fo.price_total|da }} en {{ fo.installments }} mensualité(s) · rappels automatiques J-3, J, J+3, J+10</div></div>
+<div class="small muted">{% if fo.registration_fee %}Inscription {{ fo.registration_fee|da }} + {% endif %}{{ fo.price_total|da }} en {{ fo.installments }} mensualité(s) · {{ 'rappels email automatiques J-3, J, J+3, J+10' if email_on else 'relances par WhatsApp' }}</div></div>
 <a class="btn ghost" href="{{ url_for('export', fid=fo.id, kind='paiements') }}"><i class="bi bi-file-earmark-excel"></i> Export</a></div>
 <div class="grid g4" style="margin-bottom:16px"><div class="kpi"><span>Attendu</span><b>{{ tot.expected|da }}</b></div><div class="kpi o"><span>Encaissé</span><b>{{ tot.paid|da }}</b></div>
 <div class="kpi"><span>Reste</span><b>{{ tot.remaining|da }}</b></div><div class="kpi" style="border-top-color:#dc2626"><span>En retard</span><b>{{ tot.overdue|da }}</b></div></div>
@@ -15,10 +15,10 @@
 <td>{% if p.status == 'due' %}
 <form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="row">{{ csrf }}<input type="hidden" name="action" value="paid">
 <input type="number" name="amount" value="{{ p.amount }}" style="width:110px" title="Montant reçu (partiel possible)"><select name="method" style="width:auto">{% for m in pay_methods %}<option value="{{ m }}">{{ L[m] }}</option>{% endfor %}</select>
-<input type="date" name="paid_on" value="{{ today }}" style="width:auto"><label class="check xs"><input type="checkbox" name="notify" checked> email</label><label class="check xs"><input type="checkbox" name="print" checked> reçu</label>
+<input type="date" name="paid_on" value="{{ today }}" style="width:auto">{% if email_on %}<label class="check xs"><input type="checkbox" name="notify" checked> email</label>{% endif %}<label class="check xs"><input type="checkbox" name="print" checked> reçu</label>
 <button class="btn sm green"><i class="bi bi-cash"></i> Encaisser</button></form>
 <div class="row" style="margin-top:6px">
-<form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="inline">{{ csrf }}<button class="btn sm ghost" name="action" value="remind" title="Relance email"><i class="bi bi-envelope"></i></button><button class="btn sm ghost" name="action" value="waive" onclick="return confirm('Exonérer cette échéance ?')">Exonérer</button></form>
+<form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="inline">{{ csrf }}{% if email_on %}<button class="btn sm ghost" name="action" value="remind" title="Relance email"><i class="bi bi-envelope"></i></button>{% endif %}<button class="btn sm ghost" name="action" value="waive" onclick="return confirm('Exonérer cette échéance ?')">Exonérer</button></form>
 {% set msg = 'Bonjour, rappel : le paiement « ' ~ p.label ~ ' » de ' ~ fmt_da(p.amount) ~ ' pour la formation ' ~ fo.title ~ ' (' ~ st.first_name ~ ') ' ~ ('était dû le ' if stt=='overdue' else 'est dû le ') ~ (p.due_on|d) ~ '. Détail : ' ~ base ~ '/t/' ~ e.token ~ ' — ' ~ centre.centre_name %}
 {% if st.phone %}<a class="btn sm wa" target="_blank" href="{{ wa(st.phone, msg) }}"><i class="bi bi-whatsapp"></i> stagiaire</a>{% endif %}{% if st.parent_phone %}<a class="btn sm wa" target="_blank" href="{{ wa(st.parent_phone, msg) }}"><i class="bi bi-whatsapp"></i> parent</a>{% endif %}
 <details style="display:inline-block"><summary class="btn sm ghost">Modifier</summary><form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="row" style="margin-top:6px">{{ csrf }}<input type="hidden" name="action" value="edit"><input type="number" name="amount" value="{{ p.amount }}" style="width:110px"><input type="date" name="due_on" value="{{ p.due_on }}" style="width:auto"><button class="btn sm">OK</button></form></details></div>

@@ -9,6 +9,7 @@
 {% for d in data %}{% set e = d.enr %}<div class="card"><div class="row" style="justify-content:space-between">
 <div><a href="{{ url_for('formation_detail', fid=e.formation_id) }}"><b>{{ e.formation.title }}</b></a> <span class="badge b-{{ e.status }}">{{ L[e.status] }}</span></div>
 <div class="row"><a class="btn sm ghost" href="{{ url_for('ticket', token=e.token) }}" target="_blank"><i class="bi bi-qr-code"></i> Espace / QR</a>
+{% if e.status == 'confirmed' and st.phone %}<a class="btn sm wa" target="_blank" href="{{ wa(st.phone, 'Bonjour ' ~ st.first_name ~ ', votre espace personnel pour la formation « ' ~ e.formation.title ~ ' » (QR code de présence, planning, paiements) : ' ~ parent_url.rsplit('/parent/',1)[0] ~ '/t/' ~ e.token ~ ' — ' ~ centre.centre_name) }}"><i class="bi bi-whatsapp"></i> Envoyer</a>{% endif %}
 {% if not e.formation.is_free %}<a class="btn sm ghost" href="{{ url_for('payments_view', fid=e.formation_id) }}#e{{ e.id }}"><i class="bi bi-cash"></i> Paiements</a>{% endif %}
 {% if d.cert[0] %}<a class="btn sm o" href="{{ url_for('certificate_admin', eid=e.id) }}"><i class="bi bi-award"></i> Attestation</a>{% else %}<span class="xs muted" title="{{ d.cert[1] }}"><i class="bi bi-award"></i> {{ d.cert[1] }}</span>{% endif %}</div></div>
 <div class="grid g4" style="margin-top:10px"><div><span class="xs muted">Assiduité</span><div><b>{{ d.att.rate }} %</b> <span class="xs muted">{{ d.att.attended }} prés. · {{ d.att.late }} ret. · {{ d.att.absent }} abs.</span></div></div>

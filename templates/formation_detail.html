@@ -25,7 +25,8 @@
 {% if e.status != 'confirmed' %}<button class="btn sm green" name="action" value="enr_confirm" title="Confirmer"><i class="bi bi-check2"></i></button>{% endif %}
 {% if e.status != 'cancelled' %}<button class="btn sm red" name="action" value="enr_cancel" title="Annuler" onclick="return confirm('Annuler cette inscription ?')"><i class="bi bi-x"></i></button>{% else %}
 <button class="btn sm red" name="action" value="enr_delete" title="Supprimer" onclick="return confirm('Supprimer définitivement ?')"><i class="bi bi-trash"></i></button>{% endif %}</form>
-<a class="btn sm ghost" href="{{ url_for('ticket', token=e.token) }}" target="_blank" title="Espace stagiaire / QR"><i class="bi bi-qr-code"></i></a></td></tr>
+<a class="btn sm ghost" href="{{ url_for('ticket', token=e.token) }}" target="_blank" title="Espace stagiaire / QR"><i class="bi bi-qr-code"></i></a>
+{% if e.status == 'confirmed' and st.phone %}<a class="btn sm wa" target="_blank" title="Envoyer l'espace et le QR par WhatsApp" href="{{ wa(st.phone, 'Bonjour ' ~ st.first_name ~ ', votre inscription à la formation « ' ~ fo.title ~ ' » est confirmée. Votre espace personnel (QR code de présence, planning, paiements) : ' ~ public_url.rsplit('/f/',1)[0] ~ '/t/' ~ e.token ~ ' — ' ~ centre.centre_name) }}"><i class="bi bi-whatsapp"></i></a>{% endif %}</td></tr>
 {% else %}<tr><td colspan="6" class="muted">Aucun inscrit.</td></tr>{% endfor %}</table></div></div>
 <div class="card"><h2>Inscrire un stagiaire</h2>
 <form method="post" action="{{ url_for('formation_action', fid=fo.id) }}">{{ csrf }}<input type="hidden" name="action" value="enr_add"><input type="hidden" name="student_id" id="sid">

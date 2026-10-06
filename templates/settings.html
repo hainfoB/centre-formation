@@ -5,5 +5,5 @@
 <div class="full"><label>Modalités de paiement par défaut</label><textarea name="payment_info" rows="3">{{ s.payment_info }}</textarea></div></div>
 <div style="margin-top:12px"><button class="btn o">Enregistrer</button></div></form></div>
 <div class="card"><h2>Emails automatiques</h2>{% if email_ok %}<p class="small" style="color:var(--ok)"><i class="bi bi-check-circle"></i> Envoi d'emails configuré : confirmations, rappels J-1 et relances de paiement actifs.</p>
-{% else %}<p class="small"><i class="bi bi-exclamation-triangle" style="color:var(--warn)"></i> Aucun service d'email configuré. Ajoutez sur Railway les variables <code>BREVO_API_KEY</code> et <code>EMAIL_FROM</code> (gratuit jusqu'à 300 emails/jour). En attendant, utilisez les boutons WhatsApp.</p>{% endif %}</div>
+{% else %}<p class="small"><i class="bi bi-exclamation-triangle" style="color:var(--warn)"></i> Mode WhatsApp : les emails sont désactivés (les relances et l'envoi des liens se font avec les boutons WhatsApp). Pour activer les emails plus tard, ajoutez sur Railway les variables <code>BREVO_API_KEY</code> et <code>EMAIL_FROM</code> (gratuit jusqu'à 300 emails/jour).</p>{% endif %}</div>
 {% endblock %}

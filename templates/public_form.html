@@ -7,7 +7,7 @@
 <span class="chip" style="background:var(--orange)">{% if fo.is_free %}Gratuite{% else %}{{ fo.total_cost|da }}{% if fo.installments > 1 %} · {{ fo.installments }} mensualités{% endif %}{% endif %}</span></div></div>
 
 {% if done %}<div class="card center">
-{% if done == 'confirmed' %}<h2 style="color:var(--ok)"><i class="bi bi-check-circle-fill"></i> Inscription confirmée !</h2><p>Votre espace personnel contient votre QR code de présence et votre planning.</p><a class="btn o" href="{{ url_for('ticket', token=enr.token) }}">Ouvrir mon espace</a>
+{% if done == 'confirmed' %}<h2 style="color:var(--ok)"><i class="bi bi-check-circle-fill"></i> Inscription confirmée !</h2><p>Votre espace personnel contient votre QR code de présence et votre planning.</p><a class="btn o" href="{{ url_for('ticket', token=enr.token) }}">Ouvrir mon espace</a><p class="xs muted" style="margin-top:10px">Gardez ce lien (ajoutez la page à vos favoris) : il contient votre QR code de présence.</p>
 {% elif done == 'pending' %}<h2><i class="bi bi-hourglass-split" style="color:var(--orange)"></i> Demande enregistrée</h2><p>Le secrétariat vous contactera pour finaliser l'inscription{% if not fo.is_free %} (règlement des frais){% endif %}.</p>
 {% elif done == 'waitlist' %}<h2>Liste d'attente</h2><p>La formation est complète. Nous vous prévenons dès qu'une place se libère.</p>
 {% else %}<h2>Déjà inscrit(e)</h2><p>Vous êtes déjà inscrit(e) à cette formation.</p>{% endif %}</div>

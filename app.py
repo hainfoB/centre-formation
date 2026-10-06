@@ -142,7 +142,8 @@ LABELS = {
 
 @app.context_processor
 def inject():
-    return {"L": LABELS, "centre": Setting.all(), "today": today(), "fmt_da": fmt_da,
+    return {"L": LABELS, "centre": Setting.all(), "today": today(), "fmt_da": fmt_da, "wa": wa_link,
+            "email_on": bool(os.environ.get("BREVO_API_KEY") or os.environ.get("SMTP_HOST")),
             "roles": ROLES, "pay_methods": PAY_METHODS, "statuses": FORMATION_STATUSES}
 
 

@@ -26,6 +26,8 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or "dev-" + hashlib.sha2
 _db_url = os.environ.get("DATABASE_URL", "sqlite:///centre.db")
 if _db_url.startswith("postgres://"):
     _db_url = "postgresql://" + _db_url[len("postgres://"):]
+if _db_url.startswith("postgresql://"):          # SQLAlchemy 2.1 defaults to psycopg 3: use the installed psycopg2
+    _db_url = "postgresql+psycopg2://" + _db_url[len("postgresql://"):]
 app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 app.config["WTF_CSRF_TIME_LIMIT"] = None

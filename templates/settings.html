@@ -1,9 +1,13 @@
-{% extends "base.html" %}{% block content %}<div class="head"><h1>Paramètres du centre</h1></div>
-<div class="card"><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="fields">
+{% extends "base.html" %}{% block title %}Paramètres{% endblock %}{% block content %}<div class="head"><h1>Paramètres du centre</h1></div>
+<div class="card"><form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="row" style="gap:16px;margin-bottom:14px">{% if s.logo %}<img src="{{ s.logo }}" alt="Logo" style="width:72px;height:72px;object-fit:contain;border:1.5px solid var(--line);border-radius:12px;background:#fff">{% else %}<span class="logo ph" style="width:72px;height:72px;font-size:30px"><i class="bi bi-image"></i></span>{% endif %}
+<div style="flex:1;min-width:220px"><label>Logo (PNG ou JPG, carré de préférence, &lt; 600 Ko)</label><input type="file" name="logo" accept="image/png,image/jpeg"><div class="xs muted">Affiché dans le menu, les pages publiques, les reçus, les attestations et les feuilles d'émargement.</div>
+{% if s.logo %}<label class="check xs" style="margin-top:6px"><input type="checkbox" name="remove_logo"> Retirer le logo</label>{% endif %}</div></div><div class="fields">
 {% for k, lab in (('centre_name','Nom du centre'),('centre_tagline','Slogan / mention'),('centre_address','Adresse (la ville en dernier, après une virgule)'),('centre_phone','Téléphone'),('centre_email','Email'),('centre_agrement',"N° d'agrément"),('director_name','Nom du directeur (attestations)')) %}
 <div><label>{{ lab }}</label><input name="{{ k }}" value="{{ s[k] }}"></div>{% endfor %}
 <div class="full"><label>Modalités de paiement par défaut</label><textarea name="payment_info" rows="3">{{ s.payment_info }}</textarea></div></div>
 <div style="margin-top:12px"><button class="btn o">Enregistrer</button></div></form></div>
+<div class="card"><h2><i class="bi bi-cloud-download" style="color:var(--orange)"></i> Sauvegarde</h2><p class="small muted">La base PostgreSQL est sauvegardée par Railway. Téléchargez aussi régulièrement une copie complète (Excel, une feuille par table) à conserver chez vous.</p><a class="btn" href="{{ url_for('backup_xlsx') }}"><i class="bi bi-download"></i> Télécharger la sauvegarde complète</a></div>
 <div class="card"><h2>Emails automatiques</h2>{% if email_ok %}<p class="small" style="color:var(--ok)"><i class="bi bi-check-circle"></i> Envoi d'emails configuré : confirmations, rappels J-1 et relances de paiement actifs.</p>
 {% else %}<p class="small"><i class="bi bi-exclamation-triangle" style="color:var(--warn)"></i> Mode WhatsApp : les emails sont désactivés (les relances et l'envoi des liens se font avec les boutons WhatsApp). Pour activer les emails plus tard, ajoutez sur Railway les variables <code>BREVO_API_KEY</code> et <code>EMAIL_FROM</code> (gratuit jusqu'à 300 emails/jour).</p>{% endif %}</div>
 {% endblock %}

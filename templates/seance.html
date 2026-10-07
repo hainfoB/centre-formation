@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block content %}
+{% extends "base.html" %}{% block title %}Séance du {{ s.day|d }}{% endblock %}{% block content %}
 <div class="head"><div><div class="small muted">{% if current_user.can('manage') %}<a href="{{ url_for('formation_detail', fid=fo.id, tab='seances') }}">{{ fo.title }}</a>{% else %}{{ fo.title }}{% endif %} /</div>
 <h1>Séance du {{ s.day|d }}</h1><div class="small muted">{{ s.time_label or fo.default_time_label() }} · tolérance retard {{ fo.late_tolerance }} min · pointage {{ 'entrée + sortie' if fo.check_mode=='inout' else 'entrée' }}</div></div>
 <div class="row small"><span class="badge b-present">{{ counts.present }} présents</span><span class="badge b-late">{{ counts.late }} retards</span><span class="badge b-absent">{{ counts.absent }} absents</span><span class="badge b-excused">{{ counts.excused }} excusés</span> / {{ enrs|length }}</div></div>
@@ -13,9 +13,9 @@
 <form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn sm ghost" name="form_action" value="gen_codes" title="Nouveaux codes"><i class="bi bi-arrow-repeat"></i></button></form></div></div>
 </div>
 
-<div class="card"><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="card"><form method="post" data-warn><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Feuille de présence</h2>
-<div class="row"><button class="btn sm ghost" name="form_action" value="all_present" formnovalidate>Tous présents (non pointés)</button><button type="button" class="btn sm ghost" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i></button></div></div>
+<div class="row"><a class="btn sm ghost" href="{{ url_for('signin_sheet', sid=s.id) }}" target="_blank"><i class="bi bi-printer"></i> Émargement</a><button class="btn sm ghost" name="form_action" value="all_present" formnovalidate>Tous présents (non pointés)</button><button type="button" class="btn sm ghost" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i></button></div></div>
 <div style="margin-bottom:10px"><label>Thème / contenu de la séance</label><input name="topic" value="{{ s.topic or '' }}"></div>
 <div class="tw"><table><tr><th>Stagiaire</th><th>Statut</th><th>Entrée</th>{% if fo.check_mode=='inout' %}<th>Sortie</th>{% endif %}<th>Via</th></tr>
 {% for e in enrs %}{% set a = att.get(e.id) %}<tr><td><b>{{ e.student.full_name }}</b></td>

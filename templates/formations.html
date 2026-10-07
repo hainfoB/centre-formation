@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block content %}
+{% extends "base.html" %}{% block title %}Formations{% endblock %}{% block content %}
 <div class="head"><h1>Formations</h1></div>
 <div class="card"><div class="tw"><table><tr><th>Formation</th><th>Dates</th><th>Tarif</th><th>Inscrits</th><th>Statut</th></tr>
 {% for fo in items %}{% set c = counts[fo.id] %}<tr><td><a href="{{ url_for('formation_detail', fid=fo.id) }}"><b>{{ fo.title }}</b></a><div class="xs muted">{{ L[fo.mode] }}{% if fo.trainer %} · {{ fo.trainer }}{% endif %}</div></td>
@@ -6,7 +6,7 @@
 <td class="small nowrap">{% if fo.is_free %}Gratuite{% else %}{{ fo.total_cost|da }}{% if fo.installments > 1 %}<div class="xs muted">{{ fo.installments }} mensualités</div>{% endif %}{% endif %}</td>
 <td class="small"><b>{{ c.confirmed }}</b>{% if fo.seats %}/{{ fo.seats }}{% endif %}{% if c.pending %} <span class="badge b-pending">{{ c.pending }} en attente</span>{% endif %}{% if c.waitlist %} <span class="badge b-waitlist">{{ c.waitlist }} LA</span>{% endif %}</td>
 <td><span class="badge b-{{ fo.status }}">{{ L[fo.status] }}</span></td></tr>
-{% else %}<tr><td colspan="5" class="muted">Aucune formation pour l'instant.</td></tr>{% endfor %}</table></div></div>
+{% else %}<tr><td colspan="5"><div class="empty"><i class="bi bi-journal-plus"></i>Aucune formation. Créez la première avec le formulaire ci-dessous.</div></td></tr>{% endfor %}</table></div></div>
 <div class="card" id="new"><h2><i class="bi bi-plus-circle" style="color:var(--orange)"></i> Nouvelle formation</h2>
 <form method="post">{% include "_formation_form.html" %}<div style="margin-top:14px"><button class="btn o">Créer la formation</button></div></form></div>
 {% endblock %}

@@ -22,7 +22,16 @@ from notify import html_mail, send_email, wa_link
 
 # ── App setup ─────────────────────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
+from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: E402
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)   # Railway terminates HTTPS in front of us
+if not os.environ.get("SECRET_KEY"):
+    print("⚠️  SECRET_KEY absente : les sessions et QR seront invalidés à chaque redémarrage.")
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or "dev-" + hashlib.sha256(os.urandom(16)).hexdigest()
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024        # uploads (Excel, logo) ≤ 5 Mo
+_PROD = bool(os.environ.get("RAILWAY_ENVIRONMENT"))
+app.config.update(SESSION_COOKIE_SECURE=_PROD, REMEMBER_COOKIE_SECURE=_PROD, SESSION_COOKIE_HTTPONLY=True,
+                  REMEMBER_COOKIE_HTTPONLY=True, REMEMBER_COOKIE_DURATION=timedelta(days=14),
+                  PERMANENT_SESSION_LIFETIME=timedelta(days=14))
 _db_url = os.environ.get("DATABASE_URL", "sqlite:///centre.db")
 if _db_url.startswith("postgres://"):
     _db_url = "postgresql://" + _db_url[len("postgres://"):]
@@ -47,8 +56,72 @@ def load_user(uid):
     return db.session.get(User, int(uid))
 
 
+def auto_migrate():
+    """create_all() never adds columns to existing tables: add the missing ones (nullable) so a
+    deploy with new fields never breaks the live database."""
+    from sqlalchemy import inspect as sa_inspect, text
+    insp = sa_inspect(db.engine)
+    for table in db.metadata.sorted_tables:
+        if not insp.has_table(table.name):
+            continue
+        have = {c["name"] for c in insp.get_columns(table.name)}
+        for col in table.columns:
+            if col.name not in have:
+                ddl = col.type.compile(dialect=db.engine.dialect)
+                with db.engine.begin() as conn:
+                    conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}'))
+                print(f"🛠  Colonne ajoutée : {table.name}.{col.name}")
+
+
 with app.app_context():
     db.create_all()
+    auto_migrate()
+
+
+@app.after_request
+def security_headers(resp):
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    resp.headers.setdefault("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
+    if _PROD:
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    if request.endpoint not in ("static",) and resp.mimetype == "text/html":
+        resp.headers.setdefault("Cache-Control", "no-store")
+    return resp
+
+
+_LOGIN_FAILS = {}   # ip -> [count, first_failure_ts]
+
+
+_HITS = {}   # (bucket, ip) -> [timestamps]
+
+
+def rate_limit(bucket, per_hour):
+    """Small in-memory limiter for public POST endpoints (one gunicorn worker)."""
+    def deco(fn):
+        @wraps(fn)
+        def inner(*a, **kw):
+            if request.method == "POST":
+                now = datetime.utcnow().timestamp()
+                key = (bucket, request.remote_addr or "?")
+                hits = [t for t in _HITS.get(key, []) if now - t < 3600]
+                if len(hits) >= per_hour:
+                    return render_template("message.html", title="Trop de tentatives",
+                                           text="Merci de réessayer un peu plus tard."), 429
+                hits.append(now)
+                _HITS[key] = hits
+            return fn(*a, **kw)
+        return inner
+    return deco
+
+
+def _login_blocked(ip):
+    n, t0 = _LOGIN_FAILS.get(ip, (0, 0))
+    if n and datetime.utcnow().timestamp() - t0 > 900:
+        _LOGIN_FAILS.pop(ip, None)
+        return False
+    return n >= 8
 
 
 def base_url():
@@ -142,7 +215,13 @@ LABELS = {
 
 @app.context_processor
 def inject():
-    return {"L": LABELS, "centre": Setting.all(), "today": today(), "fmt_da": fmt_da, "wa": wa_link,
+    nav = {}
+    if current_user.is_authenticated and current_user.can("manage"):
+        nav["overdue"] = (Payment.query.join(Enrollment).join(Formation)
+                          .filter(Payment.status == "due", Payment.due_on < today(), Enrollment.status == "confirmed",
+                                  Formation.status != "draft").count())
+        nav["pending"] = Enrollment.query.filter_by(status="pending").count()
+    return {"nav": nav, "L": LABELS, "centre": Setting.all(), "today": today(), "fmt_da": fmt_da, "wa": wa_link,
             "email_on": bool(os.environ.get("BREVO_API_KEY") or os.environ.get("SMTP_HOST")),
             "roles": ROLES, "pay_methods": PAY_METHODS, "statuses": FORMATION_STATUSES}
 
@@ -193,11 +272,19 @@ def setup():
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
+    ip = request.remote_addr or "?"
     if request.method == "POST":
+        if _login_blocked(ip):
+            flash("Trop de tentatives. Réessayez dans 15 minutes.", "error")
+            return render_template("login.html"), 429
         u = User.query.filter_by(email=request.form.get("email", "").strip().lower()).first()
         if u and u.active and u.check_password(request.form.get("password", "")):
-            login_user(u, remember=True)
-            return redirect(request.args.get("next") or url_for("dashboard"))
+            _LOGIN_FAILS.pop(ip, None)
+            login_user(u, remember=bool(request.form.get("remember")))
+            nxt = request.args.get("next") or ""
+            return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("dashboard"))
+        n, t0 = _LOGIN_FAILS.get(ip, (0, datetime.utcnow().timestamp()))
+        _LOGIN_FAILS[ip] = (n + 1, t0)
         flash("Identifiants incorrects.", "error")
     return render_template("login.html")
 
@@ -501,8 +588,33 @@ def dashboard():
     seances_today = Seance.query.filter_by(day=today()).all()
     upcoming = Seance.query.filter(Seance.day > today(), Seance.day <= today() + timedelta(days=7)).order_by(Seance.day).all()
     pending = Enrollment.query.filter_by(status="pending").order_by(Enrollment.created_at.desc()).limit(10).all()
+    # collections over the last 6 months
+    months = []
+    m0 = today().replace(day=1)
+    for k in range(5, -1, -1):
+        a = add_months(m0, -k)
+        b = add_months(a, 1)
+        v = db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+            Payment.status == "paid", Payment.paid_on >= a, Payment.paid_on < b).scalar()
+        months.append({"label": ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"][a.month - 1],
+                       "value": int(v or 0)})
+    mmax = max([m["value"] for m in months] + [1])
+    running = []
+    for fo in Formation.query.filter(Formation.status.in_(("open", "running"))).order_by(Formation.starts_on).all():
+        st = attendance_stats(fo)
+        nxt = fo.seances.filter(Seance.day >= today()).first()
+        running.append({"fo": fo, "avg": st["avg"], "held": len(st["held"]), "total": len(st["seances"]),
+                        "confirmed": len(st["rows"]), "next": nxt})
+    setup = {"settings": bool(Setting.get("centre_address") or Setting.get("centre_phone")),
+             "formation": Formation.query.count() > 0, "seances": Seance.query.count() > 0,
+             "open": Formation.query.filter(Formation.status != "draft").count() > 0,
+             "students": Enrollment.query.count() > 0}
+    due_week = (db.session.query(func.coalesce(func.sum(Payment.amount), 0)).join(Enrollment)
+                .filter(Payment.status == "due", Enrollment.status == "confirmed",
+                        Payment.due_on >= today(), Payment.due_on <= today() + timedelta(days=7)).scalar())
     return render_template("dashboard.html", kpi=kpi, overdue=overdue, seances_today=seances_today,
-                           upcoming=upcoming, pending=pending, state=payment_state, wa=wa_link)
+                           upcoming=upcoming, pending=pending, state=payment_state, months=months, mmax=mmax,
+                           running=running, alerts=absence_alerts()[:12], setup=setup, due_week=due_week)
 
 
 @app.route("/mes-seances")
@@ -766,6 +878,7 @@ def room_qr(token):
 
 
 @app.route("/checkin/<int:sid>/<direction>/<int:window>/<sig>", methods=["GET", "POST"])
+@rate_limit("checkin", 120)
 def room_checkin(sid, direction, window, sig):
     s = Seance.query.get_or_404(sid)
     if direction not in ("in", "out") or not hmac.compare_digest(sig, room_sig(s.id, direction, window)):
@@ -788,6 +901,7 @@ def room_checkin(sid, direction, window, sig):
 
 
 @app.route("/f/<slug>/presence", methods=["GET", "POST"])
+@rate_limit("code", 60)
 def code_presence(slug):
     """Online séances: email/phone + the code announced by the trainer."""
     fo = Formation.query.filter_by(slug=slug).first_or_404()
@@ -1067,6 +1181,125 @@ def students_api():
     return jsonify([{"id": s.id, "label": f"{s.full_name} · {s.phone or s.email or ''}"} for s in items])
 
 
+# ── Excel import ──────────────────────────────────────────────────────────────────────────────────
+IMPORT_COLS = [("last_name", "Nom"), ("first_name", "Prénom"), ("phone", "Téléphone"), ("email", "Email"),
+               ("birth_date", "Date de naissance"), ("birth_place", "Lieu de naissance"), ("level", "Niveau"),
+               ("address", "Adresse"), ("parent_name", "Parent / tuteur"), ("parent_phone", "Tél. parent"),
+               ("parent_email", "Email parent")]
+_ALIASES = {"nom": "last_name", "nom de famille": "last_name", "prenom": "first_name", "telephone": "phone",
+            "tel": "phone", "mobile": "phone", "email": "email", "e-mail": "email", "mail": "email",
+            "date de naissance": "birth_date", "naissance": "birth_date", "lieu de naissance": "birth_place",
+            "niveau": "level", "niveau d'etudes": "level", "adresse": "address", "parent": "parent_name",
+            "parent / tuteur": "parent_name", "tuteur": "parent_name", "nom du parent": "parent_name",
+            "tel. parent": "parent_phone", "tel parent": "parent_phone", "telephone parent": "parent_phone",
+            "telephone du parent": "parent_phone", "email parent": "parent_email"}
+
+
+def _norm_head(h):
+    import unicodedata
+    h = unicodedata.normalize("NFKD", str(h or "")).encode("ascii", "ignore").decode().strip().lower()
+    return re.sub(r"\s+", " ", h)
+
+
+def _cell_str(v, field):
+    if v is None:
+        return ""
+    if isinstance(v, datetime):
+        return v.date().isoformat()
+    if isinstance(v, date):
+        return v.isoformat()
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    v = str(v).strip()
+    if field in ("phone", "parent_phone"):
+        d = re.sub(r"\D", "", v)
+        if len(d) == 9 and d[0] in "567":      # Excel dropped the leading 0
+            d = "0" + d
+        return d
+    if field == "birth_date" and re.match(r"^\d{1,2}/\d{1,2}/\d{4}$", v):
+        dd, mm, yy = v.split("/")
+        return f"{yy}-{int(mm):02d}-{int(dd):02d}"
+    return v
+
+
+def read_students_xlsx(fileobj):
+    """Rows as dicts of student fields. Header row matched by name (accents/case ignored)."""
+    from openpyxl import load_workbook
+    ws = load_workbook(fileobj, read_only=True, data_only=True).active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return []
+    labels = {_norm_head(lab): f for f, lab in IMPORT_COLS}
+    mapping = {}
+    for i, h in enumerate(rows[0]):
+        key = _norm_head(h)
+        f = labels.get(key) or _ALIASES.get(key)
+        if f and f not in mapping.values():
+            mapping[i] = f
+    out = []
+    for r in rows[1:]:
+        d = {f: _cell_str(r[i] if i < len(r) else None, f) for i, f in mapping.items()}
+        if any(d.values()):
+            out.append(d)
+    return out
+
+
+@app.route("/import/modele.xlsx")
+@role_required("manage")
+def import_template():
+    return xlsx([[lab for _, lab in IMPORT_COLS],
+                 ["BENALI", "Amine", "0550123456", "amine@exemple.dz", "15/03/2005", "Sétif", "3AS", "", "Benali Karim",
+                  "0661000000", ""]], "modele_import_stagiaires.xlsx")
+
+
+@app.route("/import", methods=["POST"])
+@role_required("manage")
+def import_students():
+    fid = to_int(request.form.get("formation_id"), 0, 10 ** 9)
+    fo = db.session.get(Formation, fid) if fid else None
+    back = url_for("formation_detail", fid=fo.id) if fo else url_for("students")
+    f = request.files.get("file")
+    if not f or not f.filename.lower().endswith((".xlsx", ".xlsm")):
+        flash("Choisissez un fichier Excel (.xlsx).", "error")
+        return redirect(back)
+    try:
+        rows = read_students_xlsx(f)
+    except Exception:  # noqa: BLE001
+        flash("Fichier illisible. Utilisez le modèle fourni.", "error")
+        return redirect(back)
+    report = {"created": 0, "updated": 0, "enrolled": 0, "already": 0, "errors": []}
+    for n, d in enumerate(rows, start=2):
+        if not d.get("last_name") or not d.get("first_name"):
+            report["errors"].append(f"ligne {n} : nom ou prénom manquant")
+            continue
+        d = {k: v for k, v in d.items() if v}       # empty cells never erase an existing file
+        before = Student.query.count()
+        st = find_or_create_student(d)
+        db.session.flush()
+        report["created" if Student.query.count() > before else "updated"] += 1
+        if fo:
+            if fo.enrollments.filter_by(student_id=st.id).first():
+                report["already"] += 1
+            else:
+                enr = Enrollment(formation_id=fo.id, student_id=st.id, source="import", status="confirmed")
+                db.session.add(enr)
+                db.session.flush()
+                report["enrolled"] += 1
+    db.session.commit()
+    if fo:
+        for enr in fo.enrollments.filter_by(source="import", status="confirmed"):
+            ensure_schedule(enr)
+    log("import_excel", f"{len(rows)} lignes" + (f" → {fo.title}" if fo else ""))
+    db.session.commit()
+    msg = f"Import terminé : {report['created']} nouveaux stagiaires, {report['updated']} déjà connus (fiches mises à jour)"
+    if fo:
+        msg += f", {report['enrolled']} inscrits à la formation" + (f", {report['already']} déjà inscrits" if report["already"] else "")
+    flash(msg + ".", "success")
+    if report["errors"]:
+        flash("Lignes ignorées — " + " ; ".join(report["errors"][:15]), "error")
+    return redirect(back)
+
+
 # ── Certificates ──────────────────────────────────────────────────────────────────────────────────
 def certificate_response(enr):
     from pdfs import certificate_pdf
@@ -1116,6 +1349,7 @@ def catalogue():
 
 
 @app.route("/f/<slug>", methods=["GET", "POST"])
+@rate_limit("register", 20)
 def public_form(slug):
     fo = Formation.query.filter_by(slug=slug).first_or_404()
     if fo.status == "draft" and not current_user.is_authenticated:
@@ -1163,6 +1397,7 @@ def ticket(token):
 
 
 @app.route("/t/<token>/code", methods=["POST"])
+@rate_limit("tcode", 30)
 def ticket_code(token):
     enr = Enrollment.query.filter_by(token=token).first_or_404()
     code = re.sub(r"\D", "", request.form.get("code", ""))[:4]
@@ -1247,13 +1482,270 @@ def export(fid, kind):
     abort(404)
 
 
+# ── Global search ─────────────────────────────────────────────────────────────────────────────────
+@app.route("/recherche")
+@role_required("manage")
+def search():
+    q = request.args.get("q", "").strip()
+    res = {"students": [], "formations": [], "receipts": []}
+    if len(q) >= 2:
+        like = f"%{q}%"
+        res["students"] = Student.query.filter(or_(
+            Student.last_name.ilike(like), Student.first_name.ilike(like), Student.email.ilike(like),
+            Student.phone.ilike(like), Student.parent_phone.ilike(like), Student.parent_name.ilike(like),
+            (Student.last_name + " " + Student.first_name).ilike(like),
+            (Student.first_name + " " + Student.last_name).ilike(like))).limit(30).all()
+        res["formations"] = Formation.query.filter(Formation.title.ilike(like)).limit(15).all()
+        res["receipts"] = Payment.query.filter(Payment.receipt_no.ilike(like)).limit(10).all()
+        total = sum(len(v) for v in res.values())
+        if total == 1:
+            if res["students"]:
+                return redirect(url_for("student_detail", sid=res["students"][0].id))
+            if res["formations"]:
+                return redirect(url_for("formation_detail", fid=res["formations"][0].id))
+            return redirect(url_for("receipt", pid=res["receipts"][0].id))
+    return render_template("search.html", q=q, res=res)
+
+
+# ── Unpaid follow-up across all formations, with a WhatsApp queue ─────────────────────────────────
+def pay_wa_message(p):
+    enr, st, fo = p.enrollment, p.enrollment.student, p.enrollment.formation
+    d = (p.due_on - today()).days
+    when = (f"arrive à échéance le {p.due_on:%d/%m/%Y}" if d > 0 else "est à régler aujourd'hui" if d == 0
+            else f"était dû le {p.due_on:%d/%m/%Y}")
+    return (f"Bonjour, {Setting.get('centre_name')} vous rappelle que le paiement « {p.label} » de {fmt_da(p.amount)} "
+            f"pour la formation {fo.title} ({st.first_name} {st.last_name}) {when}. "
+            f"Détail : {base_url()}/t/{enr.token}\n{fo.payment_info or Setting.get('payment_info')}")
+
+
+@app.route("/impayes")
+@role_required("manage")
+def unpaid():
+    horizon = to_int(request.args.get("jours", 7), 0, 60)
+    fid = to_int(request.args.get("formation"), 0, 10 ** 9)
+    q = (Payment.query.join(Enrollment).join(Formation)
+         .filter(Payment.status == "due", Enrollment.status == "confirmed", Formation.status != "draft",
+                 Payment.due_on <= today() + timedelta(days=horizon)))
+    if fid:
+        q = q.filter(Enrollment.formation_id == fid)
+    pays = q.order_by(Payment.due_on).all()
+    total = sum(p.amount for p in pays)
+    overdue = sum(p.amount for p in pays if p.due_on < today())
+    return render_template("unpaid.html", pays=pays, total=total, overdue=overdue, horizon=horizon, fid=fid,
+                           formations=Formation.query.filter(Formation.is_free.is_(False)).order_by(Formation.title).all(),
+                           state=payment_state)
+
+
+@app.route("/paiements/<int:pid>/wa/<who>")
+@role_required("manage")
+def payment_wa(pid, who):
+    """Log the WhatsApp reminder, then open WhatsApp with the prepared message."""
+    p = Payment.query.get_or_404(pid)
+    st = p.enrollment.student
+    phone = st.parent_phone if who == "parent" else st.phone
+    if not phone:
+        abort(404)
+    p.last_wa = datetime.utcnow()
+    p.wa_count = (p.wa_count or 0) + 1
+    log("payment_wa", f"{st.full_name} #{p.number} → {who}")
+    db.session.commit()
+    return redirect(wa_link(phone, pay_wa_message(p)))
+
+
+# ── Absence alerts ────────────────────────────────────────────────────────────────────────────────
+def absence_alerts(limit_formations=None):
+    """Confirmed students absent at the last 2 held séances (sheet filled) or under the attendance threshold."""
+    out = []
+    q = Formation.query.filter(Formation.status.in_(("open", "running")))
+    for fo in q.all():
+        held = [s for s in fo.seances.filter(Seance.day <= today()).order_by(Seance.day.desc()).limit(6)
+                if s.attendances.filter(Attendance.status.isnot(None)).count()]
+        if not held:
+            continue
+        last2 = held[:2]
+        for e in fo.enrollments.filter_by(status="confirmed"):
+            marks = {a.seance_id: a.status for a in e.attendances}
+            streak = 0
+            for s in held:
+                if marks.get(s.id) in (None, "absent"):
+                    streak += 1
+                else:
+                    break
+            if streak >= 2 and len(last2) == 2:
+                out.append({"enr": e, "fo": fo, "streak": streak, "last": held[0].day})
+    return sorted(out, key=lambda x: -x["streak"])
+
+
+@app.route("/inscriptions/<int:eid>/wa-absence")
+@role_required("manage")
+def absence_wa(eid):
+    e = Enrollment.query.get_or_404(eid)
+    st = e.student
+    phone = st.parent_phone or st.phone
+    if not phone:
+        abort(404)
+    e.last_absence_alert = today()
+    log("absence_wa", st.full_name)
+    db.session.commit()
+    msg = (f"Bonjour{(' ' + st.parent_name) if st.parent_name and st.parent_phone else ''}, {Setting.get('centre_name')} "
+           f"vous informe que {st.first_name} {st.last_name} a été absent(e) aux dernières séances de la formation "
+           f"« {e.formation.title} ». Merci de nous contacter. Suivi : {base_url()}/parent/{st.parent_token}")
+    return redirect(wa_link(phone, msg))
+
+
+# ── Formation: duplicate, delete, sign-in sheet, certificates in bulk ────────────────────────────
+_COPY_FIELDS = ("description", "programme", "prerequisites", "audience", "trainer", "trainer_id", "location", "mode",
+                "online_url", "group_url", "start_time", "end_time", "hours_total", "seats", "is_free",
+                "registration_fee", "price_total", "installments", "payment_info", "check_mode", "late_tolerance",
+                "min_attendance", "cert_requires_payment", "auto_confirm")
+
+
+@app.route("/formations/<int:fid>/dupliquer", methods=["POST"])
+@role_required("manage")
+def formation_duplicate(fid):
+    src = Formation.query.get_or_404(fid)
+    title = (request.form.get("title") or f"{src.title} (nouvelle session)").strip()[:160]
+    fo = Formation(title=title, slug=slugify(title), status="draft")
+    for f in _COPY_FIELDS:
+        setattr(fo, f, getattr(src, f))
+    start = parse_date(request.form.get("starts_on"))
+    fo.starts_on = start
+    db.session.add(fo)
+    db.session.flush()
+    old = src.seances.all()
+    if start and old and request.form.get("copy_seances"):
+        shift = start - old[0].day
+        for s in old:
+            db.session.add(Seance(formation_id=fo.id, day=s.day + shift, time_label=s.time_label, topic=s.topic,
+                                  trainer=s.trainer))
+        fo.ends_on = old[-1].day + shift
+    log("formation_duplicated", f"{src.title} → {fo.title}")
+    db.session.commit()
+    flash("Nouvelle session créée (brouillon). Vérifiez les dates puis ouvrez les inscriptions.", "success")
+    return redirect(url_for("formation_detail", fid=fo.id, tab="infos"))
+
+
+@app.route("/formations/<int:fid>/supprimer", methods=["POST"])
+@role_required("admin")
+def formation_delete(fid):
+    fo = Formation.query.get_or_404(fid)
+    paid = Payment.query.join(Enrollment).filter(Enrollment.formation_id == fo.id, Payment.status == "paid").count()
+    if paid:
+        flash(f"Suppression impossible : {paid} paiement(s) encaissé(s). Passez plutôt la formation en « Terminée ».", "error")
+        return redirect(url_for("formation_detail", fid=fo.id, tab="infos"))
+    if request.form.get("confirm", "").strip().lower() != "supprimer":
+        flash("Tapez SUPPRIMER pour confirmer.", "error")
+        return redirect(url_for("formation_detail", fid=fo.id, tab="infos"))
+    log("formation_deleted", fo.title)
+    db.session.delete(fo)
+    db.session.commit()
+    flash("Formation supprimée.", "success")
+    return redirect(url_for("formations"))
+
+
+@app.route("/seances/<int:sid>/emargement")
+@login_required
+def signin_sheet(sid):
+    s = Seance.query.get_or_404(sid)
+    if not can_access_seance(s):
+        abort(403)
+    fo = s.formation
+    enrs = (fo.enrollments.filter_by(status="confirmed").join(Student)
+            .order_by(Student.last_name, Student.first_name).all())
+    att = {a.enrollment_id: a for a in s.attendances}
+    return render_template("signin_sheet.html", s=s, fo=fo, enrs=enrs, att=att,
+                           blank=bool(request.args.get("vierge")))
+
+
+@app.route("/formations/<int:fid>/attestations.pdf")
+@role_required("manage")
+def certificates_bulk(fid):
+    from pdfs import certificates_pdf
+    fo = Formation.query.get_or_404(fid)
+    stats = attendance_stats(fo)
+    items = []
+    for r in stats["rows"]:
+        e = r["enr"]
+        if not cert_eligible(e, r)[0]:
+            continue
+        if not e.cert_no:
+            e.cert_issued_on = today()
+            db.session.flush()
+            e.cert_no = f"ATT-{e.cert_issued_on.year}-{e.id:05d}"
+        items.append((e.student, fo, e, r, f"{base_url()}/verifier/{e.token}"))
+    if not items:
+        flash("Aucun stagiaire ne remplit encore les conditions de l'attestation.", "error")
+        return redirect(url_for("formation_detail", fid=fo.id, tab="assiduite"))
+    db.session.commit()
+    log("certificates_bulk", f"{fo.title} ({len(items)})")
+    db.session.commit()
+    return send_file(io.BytesIO(certificates_pdf(Setting.all(), items)), mimetype="application/pdf",
+                     download_name=f"attestations_{fo.slug[:40]}.pdf")
+
+
+# ── Full backup (admin) ───────────────────────────────────────────────────────────────────────────
+@app.route("/sauvegarde.xlsx")
+@role_required("admin")
+def backup_xlsx():
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    wb = Workbook()
+    wb.remove(wb.active)
+    for model in (Setting, User, Student, Formation, Seance, Enrollment, Attendance, Payment, AuditLog):
+        ws = wb.create_sheet(model.__tablename__[:30])
+        cols = [c.name for c in model.__table__.columns if c.name not in ("password_hash",)]
+        ws.append(cols)
+        for cell in ws[1]:
+            cell.font, cell.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="0B2545")
+        for row in model.query.all():
+            vals = []
+            for c in cols:
+                v = getattr(row, c)
+                if c == "value" and isinstance(v, str) and v.startswith("data:"):
+                    v = "(image)"
+                vals.append(v)
+            ws.append(vals)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    log("backup_downloaded")
+    db.session.commit()
+    return send_file(buf, download_name=f"sauvegarde_centre_{today()}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/stagiaires/export.xlsx")
+@role_required("manage")
+def students_export():
+    rows = [[lab for _, lab in IMPORT_COLS] + ["Formations"]]
+    for s in Student.query.order_by(Student.last_name, Student.first_name):
+        rows.append([s.last_name, s.first_name, s.phone or "", s.email or "",
+                     s.birth_date.strftime("%d/%m/%Y") if s.birth_date else "", s.birth_place or "", s.level or "",
+                     s.address or "", s.parent_name or "", s.parent_phone or "", s.parent_email or "",
+                     ", ".join(e.formation.title for e in s.enrollments if e.status != "cancelled")])
+    return xlsx(rows, f"stagiaires_{today()}.xlsx")
+
+
 # ── Settings & users ──────────────────────────────────────────────────────────────────────────────
 @app.route("/parametres", methods=["GET", "POST"])
 @role_required("admin")
 def settings():
     if request.method == "POST":
         for k in Setting.DEFAULTS:
-            Setting.set(k, request.form.get(k, "").strip()[:1000])
+            if k != "logo":
+                Setting.set(k, request.form.get(k, "").strip()[:1000])
+        f = request.files.get("logo")
+        if request.form.get("remove_logo"):
+            Setting.set("logo", "")
+        elif f and f.filename:
+            import base64
+            data = f.read()
+            kind = {b"\x89PNG": "png", b"\xff\xd8\xff": "jpeg"}
+            mime = next((m for sig, m in kind.items() if data.startswith(sig)), None)
+            if not mime or len(data) > 600_000:
+                flash("Logo : image PNG ou JPG de moins de 600 Ko.", "error")
+            else:
+                Setting.set("logo", f"data:image/{mime};base64," + base64.b64encode(data).decode())
         log("settings_saved")
         db.session.commit()
         flash("Paramètres enregistrés.", "success")

@@ -13,6 +13,16 @@ Application Flask pour un centre de formation privé : formations, inscriptions 
 - **Espace parents** : lien privé (présences, absences, paiements, attestations).
 - **Rôles** : administrateur, secrétariat, formateur (présences de ses formations seulement).
 
+## Nouveautés (révision)
+- Recherche globale (touche « / »), compteurs d'impayés et d'inscriptions en attente dans le menu.
+- Page **Impayés & relances** : toutes formations, filtre, relance WhatsApp tracée (date, nombre), relance « à la suite ».
+- Alertes **absences répétées** au tableau de bord + message WhatsApp au parent.
+- Tableau de bord : encaissements sur 6 mois, échéances à 7 jours, formations en cours, guide de démarrage.
+- Formations : nouvelle session par duplication (planning décalé), suppression sécurisée, attestations en lot (PDF).
+- Feuille d'émargement imprimable (avec pointages ou vierge).
+- Logo du centre (menu, pages publiques, reçus, attestations, émargement), sauvegarde complète Excel, export des stagiaires.
+- Sécurité : HTTPS derrière proxy, cookies sécurisés, en-têtes de sécurité, anti-force brute à la connexion, limites sur les formulaires publics, anti double-clic, redirections sûres, migration automatique des colonnes.
+
 ## Déploiement sur Railway
 1. Créer un projet, ajouter **PostgreSQL**, puis un service depuis ce dépôt GitHub.
 2. Variables du service :

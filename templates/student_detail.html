@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block content %}
+{% extends "base.html" %}{% block title %}{{ st.full_name }}{% endblock %}{% block content %}
 {% set csrf %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endset %}
 <div class="head"><div><div class="small muted"><a href="{{ url_for('students') }}">Stagiaires</a> /</div><h1>{{ st.full_name }}</h1><div class="small muted">{{ st.phone or '' }} {{ st.email or '' }}</div></div></div>
 <div class="card" style="padding:12px 16px"><label>Lien de l'espace parents (suivi présences, paiements, attestations)</label>

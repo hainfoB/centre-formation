@@ -19,11 +19,38 @@ def _qr(c, text, x, y, size):
     renderPDF.draw(d, c, x, y)
 
 
+def _logo_reader(centre):
+    import base64
+    from reportlab.lib.utils import ImageReader
+    uri = centre.get("logo") or ""
+    if not uri.startswith("data:image/"):
+        return None
+    try:
+        return ImageReader(io.BytesIO(base64.b64decode(uri.split(",", 1)[1])))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def certificate_pdf(centre, student, formation, enr, stats, verify_url):
+    """One certificate (single page)."""
+    return certificates_pdf(centre, [(student, formation, enr, stats, verify_url)])
+
+
+def certificates_pdf(centre, items):
+    """Several certificates in one PDF, one per page (items: student, formation, enr, stats, verify_url)."""
     buf = io.BytesIO()
     W, H = landscape(A4)
     c = canvas.Canvas(buf, pagesize=(W, H))
-    c.setTitle(f"Attestation - {student.full_name}")
+    c.setTitle("Attestations" if len(items) > 1 else f"Attestation - {items[0][0].full_name}")
+    logo = _logo_reader(centre)
+    for student, formation, enr, stats, verify_url in items:
+        _draw_certificate(c, W, H, centre, logo, student, formation, enr, stats, verify_url)
+        c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def _draw_certificate(c, W, H, centre, logo, student, formation, enr, stats, verify_url):
     # frame
     c.setFillColor(white)
     c.rect(0, 0, W, H, fill=1, stroke=0)
@@ -36,11 +63,17 @@ def certificate_pdf(centre, student, formation, enr, stats, verify_url):
     c.setLineWidth(1.2)
     c.rect(24, 24, W - 48, H - 112, fill=0, stroke=1)
     # header
+    x0 = 40
+    if logo:
+        c.setFillColor(white)
+        c.roundRect(32, H - 64, 58, 58, 8, fill=1, stroke=0)
+        c.drawImage(logo, 36, H - 60, 50, 50, preserveAspectRatio=True, mask="auto")
+        x0 = 104
     c.setFillColor(white)
     c.setFont("Helvetica-Bold", 20)
-    c.drawString(40, H - 42, centre.get("centre_name", ""))
+    c.drawString(x0, H - 42, centre.get("centre_name", ""))
     c.setFont("Helvetica", 10)
-    c.drawString(40, H - 58, centre.get("centre_tagline", ""))
+    c.drawString(x0, H - 58, centre.get("centre_tagline", ""))
     if centre.get("centre_agrement"):
         c.drawRightString(W - 40, H - 42, "Agrément : " + centre["centre_agrement"])
     # title
@@ -95,6 +128,3 @@ def certificate_pdf(centre, student, formation, enr, stats, verify_url):
     c.setFont("Helvetica", 7)
     c.setFillColor(GREY)
     c.drawCentredString(W - 105, 32, "Vérifier l'authenticité")
-    c.showPage()
-    c.save()
-    return buf.getvalue()

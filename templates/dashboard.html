@@ -1,33 +1,60 @@
-{% extends "base.html" %}{% block content %}
-<div class="head"><div><h1>Tableau de bord</h1><div class="muted small">{{ today|d }}</div></div>
-<a class="btn o" href="{{ url_for('formations') }}#new"><i class="bi bi-plus-lg"></i> Nouvelle formation</a></div>
+{% extends "base.html" %}{% block title %}Tableau de bord{% endblock %}{% block content %}
+<div class="head"><div><h1>Bonjour {{ current_user.name.split(' ')[0] }}</h1><div class="muted small">{{ ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'][today.weekday()] }} {{ today|d }}</div></div>
+<div class="row"><a class="btn ghost" href="{{ url_for('students') }}#import"><i class="bi bi-file-earmark-excel"></i> Importer</a><a class="btn o" href="{{ url_for('formations') }}#new"><i class="bi bi-plus-lg"></i> Nouvelle formation</a></div></div>
+
+{% if not (setup.settings and setup.formation and setup.seances and setup.open and setup.students) %}
+<div class="card"><h2><i class="bi bi-rocket-takeoff" style="color:var(--orange)"></i> Bien démarrer</h2><div class="steps">
+<a class="step {{ 'ok' if setup.settings }}" href="{{ url_for('settings') if current_user.can('admin') else '#' }}"><i class="bi {{ 'bi-check-circle-fill' if setup.settings else 'bi-1-circle' }}"></i> Infos & logo du centre</a>
+<a class="step {{ 'ok' if setup.formation }}" href="{{ url_for('formations') }}#new"><i class="bi {{ 'bi-check-circle-fill' if setup.formation else 'bi-2-circle' }}"></i> Créer une formation</a>
+<a class="step {{ 'ok' if setup.seances }}" href="{{ url_for('formations') }}"><i class="bi {{ 'bi-check-circle-fill' if setup.seances else 'bi-3-circle' }}"></i> Générer les séances</a>
+<a class="step {{ 'ok' if setup.open }}" href="{{ url_for('formations') }}"><i class="bi {{ 'bi-check-circle-fill' if setup.open else 'bi-4-circle' }}"></i> Ouvrir les inscriptions</a>
+<a class="step {{ 'ok' if setup.students }}" href="{{ url_for('students') }}#import"><i class="bi {{ 'bi-check-circle-fill' if setup.students else 'bi-5-circle' }}"></i> Inscrire / importer</a>
+</div></div>{% endif %}
+
 <div class="grid g4" style="margin-bottom:16px">
-  <div class="kpi"><span>Stagiaires actifs</span><b>{{ kpi.students }}</b></div>
-  <div class="kpi"><span>Formations ouvertes / en cours</span><b>{{ kpi.formations }}</b></div>
-  <div class="kpi o"><span>Encaissé ce mois</span><b>{{ kpi.collected_month|da }}</b></div>
-  <div class="kpi" style="border-top-color:#dc2626"><span>Impayés en retard</span><b>{{ kpi.overdue_total|da }}</b></div>
+  <div class="kpi"><span>Stagiaires actifs</span><b>{{ kpi.students }}</b><small>{{ kpi.formations }} formation(s) ouverte(s) ou en cours</small></div>
+  <div class="kpi o"><span>Encaissé ce mois</span><b>{{ kpi.collected_month|da }}</b><small><a href="{{ url_for('cashbox') }}">voir la caisse</a></small></div>
+  <div class="kpi" style="border-top-color:#f59e0b"><span>À encaisser sous 7 jours</span><b>{{ due_week|da }}</b><small><a href="{{ url_for('unpaid', jours=7) }}">voir les échéances</a></small></div>
+  <a class="kpi" href="{{ url_for('unpaid', jours=0) }}" style="border-top-color:#dc2626;text-decoration:none;color:inherit"><span>Impayés en retard</span><b style="{{ 'color:#dc2626' if kpi.overdue_total }}">{{ kpi.overdue_total|da }}</b><small>relancer par WhatsApp →</small></a>
 </div>
+
 <div class="grid g2">
 <div class="card"><h2><i class="bi bi-calendar-event" style="color:var(--orange)"></i> Séances d'aujourd'hui</h2>
 {% for s in seances_today %}<div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">
 <div><b>{{ s.formation.title }}</b><div class="small muted">{{ s.time_label or s.formation.default_time_label() }} {{ s.topic or '' }}</div></div>
 <a class="btn sm o" href="{{ url_for('seance_view', sid=s.id) }}"><i class="bi bi-qr-code-scan"></i> Présences</a></div>
-{% else %}<p class="muted small">Aucune séance aujourd'hui.</p>{% endfor %}
-{% if upcoming %}<h3 style="margin-top:14px">7 prochains jours</h3>{% for s in upcoming %}<div class="small">{{ s.day|d }} · {{ s.formation.title }} <span class="muted">{{ s.time_label or '' }}</span></div>{% endfor %}{% endif %}
+{% else %}<div class="empty"><i class="bi bi-cup-hot"></i>Aucune séance aujourd'hui.</div>{% endfor %}
+{% if upcoming %}<h3 style="margin-top:14px">7 prochains jours</h3>{% for s in upcoming %}<div class="small" style="padding:3px 0">{{ ['lun','mar','mer','jeu','ven','sam','dim'][s.day.weekday()] }} {{ s.day|d }} · <a href="{{ url_for('seance_view', sid=s.id) }}">{{ s.formation.title }}</a> <span class="muted">{{ s.time_label or s.formation.default_time_label() }}</span></div>{% endfor %}{% endif %}
 </div>
-<div class="card"><h2><i class="bi bi-hourglass-split" style="color:var(--orange)"></i> Inscriptions à valider <span class="badge b-pending">{{ kpi.pending }}</span></h2>
+<div class="card"><h2><i class="bi bi-bar-chart" style="color:var(--orange)"></i> Encaissements — 6 derniers mois</h2>
+<div class="chart" role="img" aria-label="Encaissements mensuels">{% for m in months %}<div class="col"><span class="v">{{ (m.value/1000)|round(1) if m.value >= 1000 else m.value }}{{ 'k' if m.value >= 1000 }}</span><div class="bar2" style="height:{{ (m.value * 100 / mmax)|round }}%" title="{{ m.value|da }}"></div><span class="l">{{ m.label }}</span></div>{% endfor %}</div>
+<p class="xs muted" style="margin:6px 0 0">Montants en DA (k = milliers). Mois en cours en orange.</p></div>
+</div>
+
+<div class="grid g2">
+<div class="card"><h2><i class="bi bi-hourglass-split" style="color:var(--orange)"></i> Inscriptions à valider {% if kpi.pending %}<span class="badge b-pending">{{ kpi.pending }}</span>{% endif %}</h2>
 {% for e in pending %}<div class="row" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line)">
-<div><a href="{{ url_for('student_detail', sid=e.student_id) }}"><b>{{ e.student.full_name }}</b></a><div class="small muted">{{ e.formation.title }} · {{ e.student.phone or '' }}</div></div>
+<div><a href="{{ url_for('student_detail', sid=e.student_id) }}"><b>{{ e.student.full_name }}</b></a><div class="small muted">{{ e.formation.title }} · {{ e.student.phone or '' }} · {{ e.created_at|d }}</div></div>
+<div class="row">{% if e.student.phone %}<a class="btn sm wa" target="_blank" rel="noopener" href="{{ wa(e.student.phone, 'Bonjour ' ~ e.student.first_name ~ ', nous avons bien reçu votre demande d\'inscription à « ' ~ e.formation.title ~ ' ». ' ~ centre.centre_name) }}" title="Contacter"><i class="bi bi-whatsapp"></i></a>{% endif %}
 <form method="post" action="{{ url_for('formation_action', fid=e.formation_id) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="enrollment_id" value="{{ e.id }}">
-<button class="btn sm green" name="action" value="enr_confirm"><i class="bi bi-check2"></i> Valider</button></form></div>
-{% else %}<p class="muted small">Rien à valider.</p>{% endfor %}</div>
+<button class="btn sm green" name="action" value="enr_confirm"><i class="bi bi-check2"></i> Valider</button></form></div></div>
+{% else %}<div class="empty"><i class="bi bi-inbox"></i>Rien à valider.</div>{% endfor %}</div>
+<div class="card"><h2><i class="bi bi-person-exclamation" style="color:#dc2626"></i> Absences répétées</h2>
+{% for a in alerts %}{% set st = a.enr.student %}<div class="row" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line)">
+<div><a href="{{ url_for('student_detail', sid=st.id) }}"><b>{{ st.full_name }}</b></a><div class="small muted">{{ a.fo.title }} · <b style="color:#dc2626">{{ a.streak }} absences d'affilée</b>{% if a.enr.last_absence_alert %} · prévenu le {{ a.enr.last_absence_alert|d }}{% endif %}</div></div>
+{% if st.parent_phone or st.phone %}<a class="btn sm wa" target="_blank" rel="noopener" href="{{ url_for('absence_wa', eid=a.enr.id) }}"><i class="bi bi-whatsapp"></i> {{ 'Parent' if st.parent_phone else 'Stagiaire' }}</a>{% endif %}</div>
+{% else %}<div class="empty"><i class="bi bi-emoji-smile"></i>Aucune absence répétée.</div>{% endfor %}</div>
 </div>
-<div class="card"><h2><i class="bi bi-exclamation-triangle" style="color:#dc2626"></i> Paiements en retard</h2>
-<div class="tw"><table><tr><th>Stagiaire</th><th>Formation</th><th>Échéance</th><th class="right">Montant</th><th></th></tr>
-{% for p in overdue %}{% set st = p.enrollment.student %}<tr><td><a href="{{ url_for('student_detail', sid=st.id) }}">{{ st.full_name }}</a><div class="xs muted">{{ st.phone or '' }}{% if st.parent_phone %} · parent {{ st.parent_phone }}{% endif %}</div></td>
+
+{% if running %}<div class="card"><h2><i class="bi bi-activity" style="color:var(--orange)"></i> Formations en cours</h2><div class="tw"><table><thead><tr><th>Formation</th><th>Inscrits</th><th>Avancement</th><th>Assiduité moy.</th><th>Prochaine séance</th></tr></thead>
+{% for r in running %}<tr><td><a href="{{ url_for('formation_detail', fid=r.fo.id) }}"><b>{{ r.fo.title }}</b></a></td><td>{{ r.confirmed }}{% if r.fo.seats %}/{{ r.fo.seats }}{% endif %}</td>
+<td style="min-width:120px"><div class="bar"><i style="width:{{ (r.held*100/(r.total or 1))|round }}%"></i></div><span class="xs muted">{{ r.held }}/{{ r.total }} séances</span></td>
+<td><b style="color:{{ '#15803d' if r.avg >= r.fo.min_attendance else '#b45309' }}">{{ r.avg }} %</b></td><td class="small">{{ r.next.day|d if r.next else '—' }}</td></tr>{% endfor %}</table></div></div>{% endif %}
+
+{% if overdue %}<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0"><i class="bi bi-exclamation-triangle" style="color:#dc2626"></i> Paiements en retard</h2><a class="btn sm ghost" href="{{ url_for('unpaid', jours=0) }}">Tout voir & relancer</a></div>
+<div class="tw" style="margin-top:8px"><table><thead><tr><th>Stagiaire</th><th>Formation</th><th>Échéance</th><th class="right">Montant</th><th></th></tr></thead>
+{% for p in overdue %}{% set st = p.enrollment.student %}<tr><td><a href="{{ url_for('student_detail', sid=st.id) }}">{{ st.full_name }}</a></td>
 <td class="small">{{ p.enrollment.formation.title }}<div class="xs muted">{{ p.label }}</div></td><td><span class="badge b-overdue">{{ p.due_on|d }}</span></td><td class="right nowrap"><b>{{ p.amount|da }}</b></td>
-<td class="nowrap">{% set msg = 'Bonjour, rappel : le paiement « ' ~ p.label ~ ' » de ' ~ fmt_da(p.amount) ~ ' pour la formation ' ~ p.enrollment.formation.title ~ ' (' ~ st.first_name ~ ') était dû le ' ~ (p.due_on|d) ~ '. Merci. ' ~ centre.centre_name %}
-{% set ph = st.parent_phone or st.phone %}{% if ph %}<a class="btn sm wa" target="_blank" href="{{ wa(ph, msg) }}"><i class="bi bi-whatsapp"></i></a>{% endif %}
-<a class="btn sm ghost" href="{{ url_for('payments_view', fid=p.enrollment.formation_id) }}#e{{ p.enrollment_id }}">Encaisser</a></td></tr>
-{% else %}<tr><td colspan="5" class="muted small">Aucun retard 🎉</td></tr>{% endfor %}</table></div></div>
+<td class="nowrap">{% if st.parent_phone %}<a class="btn sm wa" target="_blank" rel="noopener" href="{{ url_for('payment_wa', pid=p.id, who='parent') }}"><i class="bi bi-whatsapp"></i> parent</a>{% elif st.phone %}<a class="btn sm wa" target="_blank" rel="noopener" href="{{ url_for('payment_wa', pid=p.id, who='student') }}"><i class="bi bi-whatsapp"></i></a>{% endif %}
+<a class="btn sm ghost" href="{{ url_for('payments_view', fid=p.enrollment.formation_id) }}#e{{ p.enrollment_id }}">Encaisser</a></td></tr>{% endfor %}</table></div></div>{% endif %}
 {% endblock %}

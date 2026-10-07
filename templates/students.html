@@ -1,9 +1,14 @@
-{% extends "base.html" %}{% block content %}<div class="head"><h1>Stagiaires</h1>
-<form class="row"><input name="q" value="{{ q }}" placeholder="Nom, téléphone, email…" style="width:260px"><button class="btn sm">Rechercher</button></form></div>
+{% extends "base.html" %}{% block title %}Stagiaires{% endblock %}{% block content %}<div class="head"><h1>Stagiaires</h1>
+<form class="row"><input name="q" value="{{ q }}" placeholder="Nom, téléphone, email…" style="width:260px"><button class="btn sm">Rechercher</button><a class="btn sm ghost" href="{{ url_for('students_export') }}"><i class="bi bi-file-earmark-excel"></i> Exporter</a></form></div>
 <div class="card"><div class="tw"><table><tr><th>Nom</th><th>Téléphone</th><th>Parent</th><th>Formations</th></tr>
 {% for s in items %}<tr><td><a href="{{ url_for('student_detail', sid=s.id) }}"><b>{{ s.full_name }}</b></a><div class="xs muted">{{ s.email or '' }}</div></td><td class="small">{{ s.phone or '' }}</td>
 <td class="small">{{ s.parent_name or '' }}<div class="xs muted">{{ s.parent_phone or '' }}</div></td><td class="small">{% for e in s.enrollments %}{% if e.status != 'cancelled' %}<span class="badge b-{{ e.status }}">{{ e.formation.title[:28] }}</span> {% endif %}{% endfor %}</td></tr>
-{% else %}<tr><td colspan="4" class="muted">Aucun stagiaire.</td></tr>{% endfor %}</table></div></div>
+{% else %}<tr><td colspan="4"><div class="empty"><i class="bi bi-person-plus"></i>{{ 'Aucun résultat.' if q else "Aucun stagiaire. Importez un fichier Excel ou créez une fiche ci-dessous." }}</div></td></tr>{% endfor %}</table></div></div>
+<div class="card" id="import"><h2><i class="bi bi-file-earmark-excel" style="color:var(--orange)"></i> Importer depuis Excel</h2>
+<p class="small muted">Une ligne par stagiaire, colonnes : Nom, Prénom, Téléphone, Email, Date de naissance, Lieu de naissance, Niveau, Adresse, Parent / tuteur, Tél. parent, Email parent. Seuls Nom et Prénom sont obligatoires. Un stagiaire déjà connu (même email ou téléphone) n'est pas créé deux fois.</p>
+<form method="post" action="{{ url_for('import_students') }}" enctype="multipart/form-data" class="row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="file" name="file" accept=".xlsx" required style="width:auto;flex:1;min-width:220px"><button class="btn o"><i class="bi bi-upload"></i> Importer</button>
+<a class="btn ghost" href="{{ url_for('import_template') }}"><i class="bi bi-download"></i> Modèle Excel</a></form><p class="xs muted" style="margin:8px 0 0">Pour inscrire en même temps à une formation, importez depuis la page de la formation.</p></div>
 <details class="card"><summary><i class="bi bi-person-plus" style="color:var(--orange)"></i> Nouveau stagiaire</summary>
 <form method="post" style="margin-top:12px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% set st = none %}{% include "_student_fields.html" %}<div style="margin-top:12px"><button class="btn o">Créer</button></div></form></details>
 {% endblock %}

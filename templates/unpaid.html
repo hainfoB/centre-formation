@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block title %}Impayés & relances{% endblock %}{% block content %}
+<div class="head"><div><h1>Impayés & relances</h1><div class="small muted">Retards et échéances des {{ horizon }} prochains jours · relance WhatsApp tracée</div></div>
+<form class="row"><select name="formation" style="width:auto"><option value="">Toutes les formations</option>{% for f in formations %}<option value="{{ f.id }}" {{ 'selected' if fid==f.id }}>{{ f.title }}</option>{% endfor %}</select>
+<select name="jours" style="width:auto">{% for j, lab in ((0,'Retards seulement'),(7,'+ 7 jours'),(15,'+ 15 jours'),(30,'+ 30 jours')) %}<option value="{{ j }}" {{ 'selected' if horizon==j }}>{{ lab }}</option>{% endfor %}</select><button class="btn sm">Filtrer</button></form></div>
+<div class="grid g3" style="margin-bottom:16px"><div class="kpi" style="border-top-color:#dc2626"><span>En retard</span><b>{{ overdue|da }}</b></div><div class="kpi o"><span>Total de la liste</span><b>{{ total|da }}</b></div><div class="kpi"><span>Échéances</span><b>{{ pays|length }}</b></div></div>
+{% if pays %}<div class="card"><div class="toolbar"><input type="search" data-filter="tbl" placeholder="Filtrer la liste…"><button type="button" class="btn sm wa" id="queue"><i class="bi bi-whatsapp"></i> Relancer à la suite <span id="qn"></span></button><span class="xs muted">Ouvre WhatsApp pour chaque ligne non relancée aujourd'hui, l'une après l'autre.</span></div>
+<div class="tw"><table id="tbl"><thead><tr><th>Stagiaire</th><th>Formation</th><th>Échéance</th><th class="right">Montant</th><th>Dernière relance</th><th></th></tr></thead>
+{% for p in pays %}{% set st = p.enrollment.student %}{% set stt = state(p) %}<tr data-row>
+<td><a href="{{ url_for('student_detail', sid=st.id) }}"><b>{{ st.full_name }}</b></a><div class="xs muted">{{ st.phone or '—' }}{% if st.parent_phone %} · parent {{ st.parent_phone }}{% endif %}</div></td>
+<td class="small">{{ p.enrollment.formation.title }}<div class="xs muted">{{ p.label }}</div></td>
+<td><span class="badge b-{{ stt }}">{{ p.due_on|d }}</span><div class="xs muted">{% set dd = (p.due_on - today).days %}{{ ('dans ' ~ dd ~ ' j') if dd > 0 else ("aujourd'hui" if dd == 0 else ('depuis ' ~ (-dd) ~ ' j')) }}</div></td>
+<td class="right nowrap"><b>{{ p.amount|da }}</b></td>
+<td class="xs">{% if p.last_wa %}{{ (p.last_wa)|hm }} le {{ (p.last_wa).strftime('%d/%m') }} · {{ p.wa_count }}×{% else %}<span class="muted">jamais</span>{% endif %}</td>
+<td class="nowrap">{% set who = 'parent' if st.parent_phone else ('student' if st.phone else '') %}
+{% if who %}<a class="btn sm wa {{ 'q' if not p.last_wa or p.last_wa.date() < today }}" target="_blank" rel="noopener" href="{{ url_for('payment_wa', pid=p.id, who=who) }}" onclick="this.classList.remove('q');this.classList.add('ghost')"><i class="bi bi-whatsapp"></i> {{ 'parent' if who=='parent' else 'stagiaire' }}</a>{% endif %}
+{% if st.parent_phone and st.phone %}<a class="btn sm ghost" target="_blank" rel="noopener" href="{{ url_for('payment_wa', pid=p.id, who='student') }}" title="Stagiaire"><i class="bi bi-whatsapp"></i></a>{% endif %}
+<a class="btn sm ghost" href="{{ url_for('payments_view', fid=p.enrollment.formation_id) }}#e{{ p.enrollment_id }}">Encaisser</a></td></tr>{% endfor %}</table></div></div>
+<script>(function(){var b=document.getElementById('queue'),n=document.getElementById('qn');function left(){return Array.prototype.filter.call(document.querySelectorAll('#tbl a.q'),function(a){return a.closest('tr').style.display!=='none'})}
+function upd(){var l=left().length;n.textContent=l?'('+l+')':'';b.disabled=!l}upd();
+b.onclick=function(){var l=left();if(!l.length)return;var a=l[0];window.open(a.href,'_blank');a.classList.remove('q');a.classList.add('ghost');a.closest('tr').style.opacity='.55';upd()};})();</script>
+{% else %}<div class="card empty"><i class="bi bi-emoji-smile"></i>Aucun impayé sur cette période.</div>{% endif %}
+{% endblock %}

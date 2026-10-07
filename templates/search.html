@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block title %}Recherche{% endblock %}{% block content %}
+<div class="head"><h1>Recherche</h1><form class="row" role="search"><input type="search" name="q" value="{{ q }}" placeholder="Nom, téléphone, email, n° de reçu…" style="width:300px" autofocus><button class="btn">Rechercher</button></form></div>
+{% if q|length < 2 %}<div class="card empty"><i class="bi bi-search"></i>Tapez au moins 2 caractères.</div>
+{% elif not (res.students or res.formations or res.receipts) %}<div class="card empty"><i class="bi bi-emoji-neutral"></i>Aucun résultat pour « {{ q }} ».</div>{% endif %}
+{% if res.students %}<div class="card"><h2>Stagiaires</h2><table>{% for s in res.students %}<tr><td><a href="{{ url_for('student_detail', sid=s.id) }}"><b>{{ s.full_name }}</b></a></td><td class="small">{{ s.phone or '' }}</td><td class="small muted">{{ s.parent_name or '' }} {{ s.parent_phone or '' }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% if res.formations %}<div class="card"><h2>Formations</h2><table>{% for f in res.formations %}<tr><td><a href="{{ url_for('formation_detail', fid=f.id) }}"><b>{{ f.title }}</b></a></td><td><span class="badge b-{{ f.status }}">{{ L[f.status] }}</span></td></tr>{% endfor %}</table></div>{% endif %}
+{% if res.receipts %}<div class="card"><h2>Reçus</h2><table>{% for p in res.receipts %}<tr><td><a href="{{ url_for('receipt', pid=p.id) }}" target="_blank">{{ p.receipt_no }}</a></td><td>{{ p.enrollment.student.full_name }}</td><td class="right">{{ p.amount|da }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% endblock %}

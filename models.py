@@ -34,6 +34,7 @@ class Setting(db.Model):
         "centre_agrement": "",
         "director_name": "",
         "payment_info": "Paiement en espèces au secrétariat ou par versement CCP.",
+        "logo": "",
     }
 
     @classmethod
@@ -220,6 +221,7 @@ class Enrollment(db.Model):
     source = db.Column(db.String(40), nullable=True)
     cert_no = db.Column(db.String(30), nullable=True)
     cert_issued_on = db.Column(db.Date, nullable=True)
+    last_absence_alert = db.Column(db.Date, nullable=True)   # parent warned by WhatsApp for absences
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     attendances = db.relationship("Attendance", backref="enrollment", lazy="dynamic", cascade="all, delete-orphan")
     payments = db.relationship("Payment", backref="enrollment", lazy="dynamic",
@@ -253,6 +255,8 @@ class Payment(db.Model):
     receipt_no = db.Column(db.String(30), nullable=True, unique=True)
     collected_by = db.Column(db.String(120), nullable=True)
     reminders = db.Column(db.String(40), default="")
+    last_wa = db.Column(db.DateTime, nullable=True)          # last WhatsApp reminder opened from the app
+    wa_count = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (db.UniqueConstraint("enrollment_id", "number", name="uq_payment"),)
 

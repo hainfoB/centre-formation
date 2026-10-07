@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block content %}<div class="head"><h1>Utilisateurs</h1></div>
+{% extends "base.html" %}{% block title %}Utilisateurs{% endblock %}{% block content %}<div class="head"><h1>Utilisateurs</h1></div>
 <div class="card"><table><tr><th>Nom</th><th>Email</th><th>Rôle</th><th></th></tr>{% for u in items %}<tr><td><b>{{ u.name }}</b>{% if not u.active %} <span class="badge b-cancelled">désactivé</span>{% endif %}</td><td class="small">{{ u.email }}</td><td>{{ L[u.role] }}</td>
 <td class="nowrap"><form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="user_id" value="{{ u.id }}">
 <button class="btn sm ghost" name="action" value="reset" onclick="return confirm('Générer un nouveau mot de passe ?')">Nouveau mot de passe</button>{% if u.id != current_user.id %}<button class="btn sm ghost" name="action" value="toggle">{{ 'Désactiver' if u.active else 'Réactiver' }}</button>{% endif %}</form></td></tr>{% endfor %}</table></div>

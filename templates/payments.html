@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block content %}
+{% extends "base.html" %}{% block title %}Paiements — {{ fo.title }}{% endblock %}{% block content %}
 {% set csrf %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endset %}
 <div class="head"><div><div class="small muted"><a href="{{ url_for('formation_detail', fid=fo.id) }}">{{ fo.title }}</a> /</div><h1>Paiements</h1>
 <div class="small muted">{% if fo.registration_fee %}Inscription {{ fo.registration_fee|da }} + {% endif %}{{ fo.price_total|da }} en {{ fo.installments }} mensualité(s) · {{ 'rappels email automatiques J-3, J, J+3, J+10' if email_on else 'relances par WhatsApp' }}</div></div>
@@ -19,8 +19,7 @@
 <button class="btn sm green"><i class="bi bi-cash"></i> Encaisser</button></form>
 <div class="row" style="margin-top:6px">
 <form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="inline">{{ csrf }}{% if email_on %}<button class="btn sm ghost" name="action" value="remind" title="Relance email"><i class="bi bi-envelope"></i></button>{% endif %}<button class="btn sm ghost" name="action" value="waive" onclick="return confirm('Exonérer cette échéance ?')">Exonérer</button></form>
-{% set msg = 'Bonjour, rappel : le paiement « ' ~ p.label ~ ' » de ' ~ fmt_da(p.amount) ~ ' pour la formation ' ~ fo.title ~ ' (' ~ st.first_name ~ ') ' ~ ('était dû le ' if stt=='overdue' else 'est dû le ') ~ (p.due_on|d) ~ '. Détail : ' ~ base ~ '/t/' ~ e.token ~ ' — ' ~ centre.centre_name %}
-{% if st.phone %}<a class="btn sm wa" target="_blank" href="{{ wa(st.phone, msg) }}"><i class="bi bi-whatsapp"></i> stagiaire</a>{% endif %}{% if st.parent_phone %}<a class="btn sm wa" target="_blank" href="{{ wa(st.parent_phone, msg) }}"><i class="bi bi-whatsapp"></i> parent</a>{% endif %}
+{% if st.phone %}<a class="btn sm wa" target="_blank" rel="noopener" href="{{ url_for('payment_wa', pid=p.id, who='student') }}"><i class="bi bi-whatsapp"></i> stagiaire</a>{% endif %}{% if st.parent_phone %}<a class="btn sm wa" target="_blank" rel="noopener" href="{{ url_for('payment_wa', pid=p.id, who='parent') }}"><i class="bi bi-whatsapp"></i> parent</a>{% endif %}{% if p.last_wa %}<span class="xs muted">relancé {{ p.last_wa.strftime('%d/%m') }} ({{ p.wa_count }}×)</span>{% endif %}
 <details style="display:inline-block"><summary class="btn sm ghost">Modifier</summary><form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="row" style="margin-top:6px">{{ csrf }}<input type="hidden" name="action" value="edit"><input type="number" name="amount" value="{{ p.amount }}" style="width:110px"><input type="date" name="due_on" value="{{ p.due_on }}" style="width:auto"><button class="btn sm">OK</button></form></details></div>
 {% elif p.status == 'paid' %}<a class="btn sm ghost" href="{{ url_for('receipt', pid=p.id) }}" target="_blank"><i class="bi bi-printer"></i> Reçu</a>
 <form method="post" action="{{ url_for('payment_action', pid=p.id) }}" class="inline">{{ csrf }}<button class="btn sm red" name="action" value="undo" onclick="return confirm('Annuler cet encaissement ?')">Annuler</button></form>

@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block content %}
+{% extends "base.html" %}{% block title %}{{ fo.title }}{% endblock %}{% block content %}
 {% set csrf %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endset %}
 <div class="head"><div><div class="small muted"><a href="{{ url_for('formations') }}">Formations</a> /</div><h1>{{ fo.title }}</h1>
 <div class="row small muted"><span class="badge b-{{ fo.status }}">{{ L[fo.status] }}</span> {{ L[fo.mode] }} · {% if fo.is_free %}Gratuite{% else %}{{ fo.total_cost|da }}{% endif %} · {{ fo.taken() }}{% if fo.seats %}/{{ fo.seats }}{% endif %} places</div></div>
@@ -6,16 +6,16 @@
 <select name="status" style="width:auto">{% for s in statuses %}<option value="{{ s }}" {{ 'selected' if fo.status==s }}>{{ L[s] }}</option>{% endfor %}</select><button class="btn sm">OK</button></form>
 {% if not fo.is_free %}<a class="btn o" href="{{ url_for('payments_view', fid=fo.id) }}"><i class="bi bi-cash-stack"></i> Paiements</a>{% endif %}</div></div>
 
-<div class="card" style="padding:12px 16px"><div class="row" style="justify-content:space-between"><div style="flex:1;min-width:240px"><label>Lien d'inscription public {% if fo.status != 'open' %}<span class="badge b-pending">ouvrez les inscriptions pour l'activer</span>{% endif %}</label>
-<div class="copy"><input id="pub" readonly value="{{ public_url }}"><button type="button" class="btn sm ghost" data-copy="pub"><i class="bi bi-clipboard"></i></button><a class="btn sm ghost" href="{{ public_url }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i></a></div></div>
+<div class="card" style="padding:12px 16px"><div class="row" style="justify-content:space-between"><div style="flex:1;min-width:240px"><label><i class="bi bi-globe2" style="color:var(--orange)"></i> Lien d'inscription en ligne {% if fo.status != 'open' %}<span class="badge b-pending">inactif : passez le statut sur « Inscriptions ouvertes »</span>{% else %}<span class="badge b-confirmed">actif</span>{% endif %}</label>
+<div class="copy"><input id="pub" readonly value="{{ public_url }}"><button type="button" class="btn sm ghost" data-copy="pub"><i class="bi bi-clipboard"></i></button><a class="btn sm ghost" href="{{ public_url }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i></a><a class="btn sm wa" target="_blank" href="https://wa.me/?text={{ ('Inscriptions ouvertes : ' ~ fo.title ~ ' — ' ~ centre.centre_name ~ '. Inscrivez-vous ici : ' ~ public_url)|urlencode }}" title="Partager sur WhatsApp"><i class="bi bi-whatsapp"></i></a></div></div>
 <div class="row"><a class="btn sm ghost" href="{{ url_for('export', fid=fo.id, kind='inscrits') }}"><i class="bi bi-file-earmark-excel"></i> Inscrits</a>
 <a class="btn sm ghost" href="{{ url_for('export', fid=fo.id, kind='presences') }}"><i class="bi bi-file-earmark-excel"></i> Présences</a></div></div></div>
 
 <div class="tabs">{% for k, lab in (('inscrits','Inscrits'),('seances','Séances (' ~ stats.seances|length ~ ')'),('assiduite','Assiduité & attestations'),('infos','Paramètres')) %}<a href="?tab={{ k }}" class="{{ 'on' if tab==k }}">{{ lab }}</a>{% endfor %}</div>
 
 {% if tab == 'inscrits' %}
-<div class="card"><div class="tw"><table><tr><th>Stagiaire</th><th>Contact</th><th>Statut</th>{% if not fo.is_free %}<th class="right">Payé / dû</th>{% endif %}<th>Assiduité</th><th></th></tr>
-{% for e in enrollments %}{% set st = e.student %}{% set r = by_enr.get(e.id) %}{% set m = money.get(e.id) %}<tr>
+<div class="card">{% if enrollments|length > 6 %}<div class="toolbar"><input type="search" data-filter="enrtbl" placeholder="Filtrer les inscrits…"></div>{% endif %}<div class="tw"><table id="enrtbl"><tr><th>Stagiaire</th><th>Contact</th><th>Statut</th>{% if not fo.is_free %}<th class="right">Payé / dû</th>{% endif %}<th>Assiduité</th><th></th></tr>
+{% for e in enrollments %}{% set st = e.student %}{% set r = by_enr.get(e.id) %}{% set m = money.get(e.id) %}<tr data-row>
 <td><a href="{{ url_for('student_detail', sid=st.id) }}"><b>{{ st.full_name }}</b></a><div class="xs muted">inscrit le {{ e.created_at|d }}{% if e.source %} · {{ e.source }}{% endif %}</div></td>
 <td class="small">{{ st.phone or '' }}<div class="xs muted">{{ st.email or '' }}</div></td>
 <td><span class="badge b-{{ e.status }}">{{ L[e.status] }}</span></td>
@@ -27,7 +27,7 @@
 <button class="btn sm red" name="action" value="enr_delete" title="Supprimer" onclick="return confirm('Supprimer définitivement ?')"><i class="bi bi-trash"></i></button>{% endif %}</form>
 <a class="btn sm ghost" href="{{ url_for('ticket', token=e.token) }}" target="_blank" title="Espace stagiaire / QR"><i class="bi bi-qr-code"></i></a>
 {% if e.status == 'confirmed' and st.phone %}<a class="btn sm wa" target="_blank" title="Envoyer l'espace et le QR par WhatsApp" href="{{ wa(st.phone, 'Bonjour ' ~ st.first_name ~ ', votre inscription à la formation « ' ~ fo.title ~ ' » est confirmée. Votre espace personnel (QR code de présence, planning, paiements) : ' ~ public_url.rsplit('/f/',1)[0] ~ '/t/' ~ e.token ~ ' — ' ~ centre.centre_name) }}"><i class="bi bi-whatsapp"></i></a>{% endif %}</td></tr>
-{% else %}<tr><td colspan="6" class="muted">Aucun inscrit.</td></tr>{% endfor %}</table></div></div>
+{% else %}<tr><td colspan="6"><div class="empty"><i class="bi bi-people"></i>Aucun inscrit pour l'instant. Partagez le lien d'inscription, importez un fichier Excel ou inscrivez quelqu'un ci-dessous.</div></td></tr>{% endfor %}</table></div></div>
 <div class="card"><h2>Inscrire un stagiaire</h2>
 <form method="post" action="{{ url_for('formation_action', fid=fo.id) }}">{{ csrf }}<input type="hidden" name="action" value="enr_add"><input type="hidden" name="student_id" id="sid">
 <div class="fields"><div class="full" style="position:relative"><label>Stagiaire existant (recherche nom / téléphone)</label><input id="search" autocomplete="off" placeholder="Tapez au moins 2 lettres…"><div id="sug" class="card" style="position:absolute;z-index:5;left:0;right:0;display:none;padding:6px"></div></div>
@@ -36,6 +36,11 @@
 <div><label>Parent / tuteur</label><input name="parent_name"></div><div><label>Tél. parent</label><input name="parent_phone"></div>
 {% if not fo.is_free %}<div><label>Remise (DA)</label><input type="number" name="discount" value="0"></div>{% endif %}
 </div><div style="margin-top:12px"><button class="btn o"><i class="bi bi-person-plus"></i> Inscrire (confirmé)</button></div></form></div>
+<div class="card"><h2><i class="bi bi-file-earmark-excel" style="color:var(--orange)"></i> Importer depuis Excel</h2>
+<p class="small muted">Une ligne par stagiaire, colonnes : Nom, Prénom, Téléphone, Email, Date de naissance, Lieu de naissance, Niveau, Adresse, Parent / tuteur, Tél. parent, Email parent. Seuls Nom et Prénom sont obligatoires. Un stagiaire déjà connu (même email ou téléphone) n'est pas créé deux fois.</p>
+<form method="post" action="{{ url_for('import_students') }}" enctype="multipart/form-data" class="row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="formation_id" value="{{ fo.id }}">
+<input type="file" name="file" accept=".xlsx" required style="width:auto;flex:1;min-width:220px"><button class="btn o"><i class="bi bi-upload"></i> Importer</button>
+<a class="btn ghost" href="{{ url_for('import_template') }}"><i class="bi bi-download"></i> Modèle Excel</a></form><p class="xs muted" style="margin:8px 0 0">Les stagiaires importés sont inscrits directement (confirmés){% if not fo.is_free %} et leur échéancier est créé{% endif %}.</p></div>
 <script>(function(){var i=document.getElementById('search'),b=document.getElementById('sug'),h=document.getElementById('sid'),t;
 i.oninput=function(){clearTimeout(t);h.value='';t=setTimeout(function(){if(i.value.length<2){b.style.display='none';return}
 fetch('{{ url_for("students_api") }}?q='+encodeURIComponent(i.value)).then(function(r){return r.json()}).then(function(d){b.innerHTML='';d.forEach(function(x){var a=document.createElement('div');a.textContent=x.label;a.style.cssText='padding:7px;cursor:pointer;border-radius:8px';a.onmouseover=function(){a.style.background='#eef4fb'};a.onmouseout=function(){a.style.background=''};a.onclick=function(){h.value=x.id;i.value=x.label;b.style.display='none'};b.appendChild(a)});b.style.display=d.length?'block':'none'})},250)}})();</script>
@@ -45,7 +50,7 @@ fetch('{{ url_for("students_api") }}?q='+encodeURIComponent(i.value)).then(funct
 {% for s in stats.seances %}{% set pres = s.attendances.filter_by(status='present').count() + s.attendances.filter_by(status='late').count() %}
 <tr><td class="nowrap"><b>{{ s.day|d }}</b> <span class="xs muted">{{ ['lun','mar','mer','jeu','ven','sam','dim'][s.day.weekday()] }}</span>{% if s.day == today %} <span class="badge b-open">aujourd'hui</span>{% endif %}</td>
 <td class="small">{{ s.time_label or fo.default_time_label() }}</td><td class="small">{{ s.topic or '' }}</td><td class="small">{{ pres if s.day <= today else '' }}</td>
-<td class="nowrap"><a class="btn sm {{ 'o' if s.day==today else 'ghost' }}" href="{{ url_for('seance_view', sid=s.id) }}"><i class="bi bi-check2-square"></i> Présences</a>
+<td class="nowrap"><a class="btn sm {{ 'o' if s.day==today else 'ghost' }}" href="{{ url_for('seance_view', sid=s.id) }}"><i class="bi bi-check2-square"></i> Présences</a> <a class="btn sm ghost" href="{{ url_for('signin_sheet', sid=s.id) }}" target="_blank" title="Feuille d'émargement imprimable"><i class="bi bi-printer"></i></a>
 <form method="post" action="{{ url_for('formation_action', fid=fo.id) }}" class="inline">{{ csrf }}<input type="hidden" name="seance_id" value="{{ s.id }}"><button class="btn sm red" name="action" value="del_seance" onclick="return confirm('Supprimer cette séance et ses présences ?')"><i class="bi bi-trash"></i></button></form></td></tr>
 {% else %}<tr><td colspan="5" class="muted">Aucune séance. Générez le planning ci-dessous.</td></tr>{% endfor %}</table></div></div>
 <div class="grid g2">
@@ -62,7 +67,7 @@ fetch('{{ url_for("students_api") }}?q='+encodeURIComponent(i.value)).then(funct
 
 {% elif tab == 'assiduite' %}
 <div class="card"><div class="row" style="justify-content:space-between"><div><b>{{ stats.held|length }}</b> séances tenues · assiduité moyenne <b>{{ stats.avg }} %</b> · seuil attestation {{ fo.min_attendance }} %</div>
-{% if fo.status != 'done' %}<span class="xs muted">Les stagiaires pourront télécharger leur attestation quand la formation sera « Terminée ».</span>{% endif %}</div>
+<div class="row">{% if fo.status != 'done' %}<span class="xs muted">Téléchargeables par les stagiaires quand la formation sera « Terminée ».</span>{% endif %}<a class="btn sm o" href="{{ url_for('certificates_bulk', fid=fo.id) }}"><i class="bi bi-files"></i> Toutes les attestations (PDF)</a></div></div>
 <div class="tw" style="margin-top:10px"><table><tr><th>Stagiaire</th>{% for s in stats.held %}<th class="center" title="{{ s.day|d }}">{{ s.day.strftime('%d/%m') }}</th>{% endfor %}<th>Taux</th><th>Heures</th><th>Attestation</th></tr>
 {% for r in stats.rows %}<tr><td class="nowrap"><a href="{{ url_for('student_detail', sid=r.enr.student_id) }}">{{ r.enr.student.full_name }}</a></td>
 {% for s in stats.held %}{% set a = r.marks.get(s.id) %}<td class="center">{% if a and a.status=='present' %}<span style="color:var(--ok)">●</span>{% elif a and a.status=='late' %}<span style="color:var(--warn)" title="retard">◐</span>{% elif a and a.status=='excused' %}<span class="muted">E</span>{% else %}<span style="color:var(--err)">○</span>{% endif %}</td>{% endfor %}
@@ -74,5 +79,11 @@ fetch('{{ url_for("students_api") }}?q='+encodeURIComponent(i.value)).then(funct
 {% else %}
 <div class="card"><form method="post" action="{{ url_for('formation_action', fid=fo.id) }}"><input type="hidden" name="action" value="edit">{% include "_formation_form.html" %}
 <div style="margin-top:14px"><button class="btn o">Enregistrer</button></div></form></div>
+<div class="grid g2"><div class="card"><h2><i class="bi bi-copy" style="color:var(--orange)"></i> Nouvelle session de cette formation</h2><p class="small muted">Copie tous les paramètres (tarifs, programme, horaires) dans une nouvelle formation en brouillon, sans les inscrits.</p>
+<form method="post" action="{{ url_for('formation_duplicate', fid=fo.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="fields">
+<div class="full"><label>Titre</label><input name="title" value="{{ fo.title }} (nouvelle session)"></div><div><label>Date de début</label><input type="date" name="starts_on"></div>
+<div style="align-self:end"><label class="check"><input type="checkbox" name="copy_seances" checked> Recopier le planning décalé</label></div></div><div style="margin-top:12px"><button class="btn">Créer la nouvelle session</button></div></form></div>
+{% if current_user.can('admin') %}<div class="card" style="border:1.5px solid #fecaca"><h2 style="color:var(--err)"><i class="bi bi-trash"></i> Supprimer la formation</h2><p class="small muted">Supprime la formation, ses séances, inscriptions et présences. Impossible si des paiements ont été encaissés.</p>
+<form method="post" action="{{ url_for('formation_delete', fid=fo.id) }}" class="row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="confirm" placeholder="Tapez SUPPRIMER" style="width:180px" autocomplete="off"><button class="btn red">Supprimer définitivement</button></form></div>{% endif %}</div>
 {% endif %}
 {% endblock %}

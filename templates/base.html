@@ -1,47 +1,70 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{% block title %}{{ centre.centre_name }}{% endblock %}</title>
+<title>{% block title %}{{ page_title or '' }}{% endblock %}{{ ' · ' if self.title() }}{{ centre.centre_name }}</title>
+<meta name="theme-color" content="#0b2545">
+<link rel="icon" href="{{ centre.logo or "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b2545'/%3E%3Cpath d='M6 13l10-5 10 5-10 5z' fill='%23f97316'/%3E%3Cpath d='M10 16v5c3 3 9 3 12 0v-5l-6 3z' fill='%23fff'/%3E%3C/svg%3E" }}">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=3">
 </head><body>
+<a class="skip" href="#main">Aller au contenu</a>
+{% macro brandmark(size=34) %}{% if centre.logo %}<img src="{{ centre.logo }}" alt="" class="logo" style="width:{{ size }}px;height:{{ size }}px">{% else %}<span class="logo ph" style="width:{{ size }}px;height:{{ size }}px"><i class="bi bi-mortarboard-fill"></i></span>{% endif %}{% endmacro %}
 {% if current_user.is_authenticated and not public %}
-<div class="topbar"><b>{{ centre.centre_name }}</b><button onclick="document.querySelector('.side').classList.toggle('open')"><i class="bi bi-list"></i></button></div>
+<div class="topbar"><span class="row" style="gap:10px">{{ brandmark(28) }}<b>{{ centre.centre_name }}</b></span><button type="button" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')"><i class="bi bi-list"></i></button></div>
+<div class="scrim" onclick="document.body.classList.remove('nav-open')"></div>
 <div class="layout">
-<nav class="side">
-  <div class="brand"><i class="bi bi-mortarboard-fill"></i> {{ centre.centre_name }}<small>{{ current_user.name }} · {{ L[current_user.role] }}</small></div>
+<nav class="side" aria-label="Navigation principale">
+  <div class="brand">{{ brandmark() }}<div><div class="bname">{{ centre.centre_name }}</div><small>{{ current_user.name }} · {{ L[current_user.role] }}</small></div></div>
   {% set ep = request.endpoint %}
   {% if current_user.can('manage') %}
-  <a href="{{ url_for('dashboard') }}" class="{{ 'on' if ep=='dashboard' }}"><i class="bi bi-speedometer2"></i> Tableau de bord</a>
+  <form action="{{ url_for('search') }}" class="sidesearch" role="search"><i class="bi bi-search"></i><input name="q" placeholder="Rechercher… (/)" value="{{ request.args.get('q','') if ep=='search' }}" aria-label="Rechercher un stagiaire, une formation, un reçu" id="gsearch"></form>
+  <a href="{{ url_for('dashboard') }}" class="{{ 'on' if ep=='dashboard' }}"><i class="bi bi-speedometer2"></i> Tableau de bord{% if nav.pending %}<span class="pill">{{ nav.pending }}</span>{% endif %}</a>
   <a href="{{ url_for('formations') }}" class="{{ 'on' if ep in ('formations','formation_detail','payments_view') }}"><i class="bi bi-journal-bookmark"></i> Formations</a>
   <a href="{{ url_for('students') }}" class="{{ 'on' if ep in ('students','student_detail') }}"><i class="bi bi-people"></i> Stagiaires</a>
   {% endif %}
   <a href="{{ url_for('my_seances') }}" class="{{ 'on' if ep in ('my_seances','seance_view') }}"><i class="bi bi-calendar-check"></i> Séances & présences</a>
   {% if current_user.can('manage') %}
+  <div class="navsec">Finances</div>
+  <a href="{{ url_for('unpaid') }}" class="{{ 'on' if ep=='unpaid' }}"><i class="bi bi-bell"></i> Impayés & relances{% if nav.overdue %}<span class="pill red">{{ nav.overdue }}</span>{% endif %}</a>
   <a href="{{ url_for('cashbox') }}" class="{{ 'on' if ep=='cashbox' }}"><i class="bi bi-cash-coin"></i> Caisse</a>
-  <a href="{{ url_for('catalogue') }}" target="_blank"><i class="bi bi-globe2"></i> Catalogue public</a>
+  <div class="navsec">Centre</div>
+  <a href="{{ url_for('catalogue') }}" target="_blank" rel="noopener"><i class="bi bi-globe2"></i> Catalogue public <i class="bi bi-box-arrow-up-right xs"></i></a>
   {% endif %}
   {% if current_user.can('admin') %}
   <a href="{{ url_for('users') }}" class="{{ 'on' if ep=='users' }}"><i class="bi bi-person-gear"></i> Utilisateurs</a>
   <a href="{{ url_for('settings') }}" class="{{ 'on' if ep=='settings' }}"><i class="bi bi-gear"></i> Paramètres</a>
   {% endif %}
   <div class="grow"></div>
-  <a href="{{ url_for('account') }}"><i class="bi bi-key"></i> Mon compte</a>
+  <a href="{{ url_for('account') }}" class="{{ 'on' if ep=='account' }}"><i class="bi bi-key"></i> Mon compte</a>
   <a href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-left"></i> Déconnexion</a>
 </nav>
-<main class="main">
-  {% with msgs = get_flashed_messages(with_categories=true) %}{% for c, m in msgs %}<div class="flash {{ c }}">{{ m }}</div>{% endfor %}{% endwith %}
+<main class="main" id="main">
+  <div class="flashes" aria-live="polite">{% with msgs = get_flashed_messages(with_categories=true) %}{% for c, m in msgs %}<div class="flash {{ c }}"><i class="bi {{ 'bi-check-circle-fill' if c=='success' else 'bi-exclamation-triangle-fill' }}"></i><span>{{ m }}</span><button type="button" aria-label="Fermer" onclick="this.parentNode.remove()">×</button></div>{% endfor %}{% endwith %}</div>
   {% block content %}{% endblock %}
 </main></div>
 {% else %}
-<header class="pubhead noprint"><div class="in"><b><i class="bi bi-mortarboard-fill"></i> {{ centre.centre_name }}</b><span class="small" style="opacity:.8">{{ centre.centre_phone }}</span></div></header>
-<div class="pub">
-  {% with msgs = get_flashed_messages(with_categories=true) %}{% for c, m in msgs %}<div class="flash {{ c }}">{{ m }}</div>{% endfor %}{% endwith %}
+<header class="pubhead noprint"><div class="in"><span class="row" style="gap:10px">{{ brandmark(32) }}<b>{{ centre.centre_name }}</b></span>{% if centre.centre_phone %}<a class="small" style="color:#fff;opacity:.85;text-decoration:none" href="tel:{{ centre.centre_phone|replace(' ','') }}"><i class="bi bi-telephone"></i> {{ centre.centre_phone }}</a>{% endif %}</div></header>
+<main class="pub" id="main">
+  <div class="flashes" aria-live="polite">{% with msgs = get_flashed_messages(with_categories=true) %}{% for c, m in msgs %}<div class="flash {{ c }}"><i class="bi {{ 'bi-check-circle-fill' if c=='success' else 'bi-exclamation-triangle-fill' }}"></i><span>{{ m }}</span></div>{% endfor %}{% endwith %}</div>
   {% block public %}{% endblock %}
-  <p class="xs muted center" style="margin-top:30px">{{ centre.centre_name }}{% if centre.centre_address %} · {{ centre.centre_address }}{% endif %}</p>
-</div>
+  <p class="xs muted center" style="margin-top:30px">{{ centre.centre_name }}{% if centre.centre_address %} · {{ centre.centre_address }}{% endif %}{% if centre.centre_agrement %} · Agrément {{ centre.centre_agrement }}{% endif %}</p>
+</main>
 {% endif %}
 <script>
-document.querySelectorAll('[data-copy]').forEach(function(b){b.onclick=function(){var i=document.getElementById(b.dataset.copy);i.select();navigator.clipboard&&navigator.clipboard.writeText(i.value);b.innerHTML='<i class="bi bi-check2"></i>';}});
+(function(){
+document.querySelectorAll('[data-copy]').forEach(function(b){b.onclick=function(){var i=document.getElementById(b.dataset.copy);i.select();try{navigator.clipboard.writeText(i.value)}catch(e){document.execCommand('copy')}var o=b.innerHTML;b.innerHTML='<i class="bi bi-check2"></i>';setTimeout(function(){b.innerHTML=o},1500)}});
+// no double submit (payments, enrolments…)
+document.addEventListener('submit',function(e){var f=e.target;if(f.method.toLowerCase()!=='post'||e.defaultPrevented)return;if(f.dataset.sent){e.preventDefault();return}f.dataset.sent='1';
+ var b=e.submitter;if(b){setTimeout(function(){b.disabled=true;b.classList.add('busy')},0)}
+ setTimeout(function(){delete f.dataset.sent;if(b){b.disabled=false;b.classList.remove('busy')}},8000)},false);
+// success messages fade out
+setTimeout(function(){document.querySelectorAll('.flash.success').forEach(function(f){f.style.transition='opacity .4s';f.style.opacity='0';setTimeout(function(){f.remove()},400)})},6000);
+// "/" focuses the search, Esc closes mobile menu
+document.addEventListener('keydown',function(e){var g=document.getElementById('gsearch');if(e.key==='/'&&g&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){e.preventDefault();g.focus()}if(e.key==='Escape')document.body.classList.remove('nav-open')});
+// client-side table filter: <input data-filter="tableId">
+document.querySelectorAll('[data-filter]').forEach(function(i){i.oninput=function(){var q=i.value.toLowerCase();document.querySelectorAll('#'+i.dataset.filter+' tr[data-row]').forEach(function(r){r.style.display=r.textContent.toLowerCase().indexOf(q)>-1?'':'none'})}});
+// warn before leaving a modified form marked data-warn
+document.querySelectorAll('form[data-warn]').forEach(function(f){var dirty=false;f.addEventListener('change',function(){dirty=true});f.addEventListener('submit',function(){dirty=false});window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue=''}})});
+})();
 </script>
 </body></html>

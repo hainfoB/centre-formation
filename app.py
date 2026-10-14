@@ -748,9 +748,25 @@ def room_window():
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────────────────────────
+@app.route("/accueil")
+def landing():
+    """Public home page: carousel, features, pricing, FAQ, sign-up (online mode)."""
+    import landing_i18n as LI
+    if LOCAL and not current_user.is_authenticated:
+        return redirect(url_for("login"))
+    lang = g.lang
+    if not session.get("lang") and not request.args.get("lang"):
+        lang = request.accept_languages.best_match(["fr", "ar", "en"]) or lang
+    c = LI.T[lang]
+    wa_plan = {k: wa_link(SALES_PHONE, c["wa_plan"].format(plan=p[0])) for p in c["plans"] for k in [p[1]]}
+    return render_template("landing.html", c=c, lang=lang, langs=LANGS, hero=LI.HERO, phones=LI.PHONES, tabs=LI.TABS,
+                           wa_plan=wa_plan, wa=wa_link(SALES_PHONE, c["wa_text"]), year=today().year)
+
+
 @app.route("/")
-@login_required
 def dashboard():
+    if not current_user.is_authenticated:
+        return landing()
     if current_user.role == "formateur":
         return redirect(url_for("my_seances"))
     d0 = today().replace(day=1)

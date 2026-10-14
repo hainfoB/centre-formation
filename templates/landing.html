@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="{{ lang }}" dir="{{ c.dir }}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ c.title }}</title>
+<meta name="description" content="{{ c.desc }}">
+<meta name="theme-color" content="#0b2545">
+<meta property="og:title" content="{{ c.title }}"><meta property="og:description" content="{{ c.desc }}"><meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b2545'/%3E%3Cpath d='M6 13l10-5 10 5-10 5z' fill='%23f97316'/%3E%3Cpath d='M10 16v5c3 3 9 3 12 0v-5l-6 3z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='landing.css') }}?v=1">
+</head><body class="lp">
+{% set I = url_for('static', filename='landing/' ~ lang) %}
+<div class="progress" id="progress"></div>
+<header class="nav" id="nav">
+  <a class="brand" href="#top"><span class="mark"><i class="bi bi-mortarboard-fill"></i></span><b>{{ c.name }}</b></a>
+  <nav id="menu" aria-label="{{ c.menu }}">
+    {% for k, label in c.nav %}<a href="#{{ k }}">{{ label }}</a>{% endfor %}
+  </nav>
+  <div class="navr">
+    <div class="langs">{% for code, nm in langs.items() %}<a href="?lang={{ code }}" class="{{ 'on' if code == lang }}" hreflang="{{ code }}">{{ code|upper }}</a>{% endfor %}</div>
+    <a class="lnk" href="{{ url_for('login') }}">{{ c.login }}</a>
+    <a class="btn o sm" href="{{ url_for('signup') }}">{{ c.signup_short }}</a>
+    <button class="burger" aria-label="{{ c.menu }}" onclick="document.body.classList.toggle('menu-open')"><i class="bi bi-list"></i></button>
+  </div>
+</header>
+
+<section class="hero" id="top">
+  <div class="blob b1"></div><div class="blob b2"></div><div class="grid-bg"></div>
+  <div class="wrap hero-in">
+    <div class="hero-copy">
+      <span class="kicker">{{ c.hero_kicker }}</span>
+      <h1>{{ c.hero_h1 }}</h1>
+      <p class="lead">{{ c.hero_sub }}</p>
+      <div class="cta">
+        <a class="btn o lg pulse" href="{{ url_for('signup') }}">{{ c.signup }}</a>
+        <a class="btn ghost lg" href="{{ url_for('static', filename='catalogue/HaithemEduAI-' ~ lang ~ '.pdf') }}" download><i class="bi bi-file-earmark-pdf"></i> {{ c.hero_cta2 }}</a>
+      </div>
+      <ul class="points">{% for p in c.hero_points %}<li><i class="bi bi-check2-circle"></i>{{ p }}</li>{% endfor %}</ul>
+    </div>
+    <div class="stage" id="carousel" aria-roledescription="carousel">
+      <div class="browser">
+        <div class="bar"><i></i><i></i><i></i><span>{{ c.name|lower }}.app</span></div>
+        <div class="shots">
+          {% for n in hero %}<img class="shot{{ ' on' if loop.first }}" src="{{ I }}/{{ n }}.jpg" alt="{{ c.slides[loop.index0][0] }}" {{ 'fetchpriority=high' if loop.first else 'loading=lazy' }} width="1280" height="800">{% endfor %}
+        </div>
+      </div>
+      <div class="phone" aria-hidden="true"><div class="pshots">{% for n in phones %}<img class="pshot{{ ' on' if loop.first }}" src="{{ I }}/{{ n }}.jpg" alt="" loading="lazy">{% endfor %}</div></div>
+      <div class="caption" aria-live="polite"><b id="capT">{{ c.slides[0][0] }}</b><span id="capD">{{ c.slides[0][1] }}</span></div>
+      <div class="dots" role="tablist">{% for s in c.slides %}<button role="tab" aria-label="{{ s[0] }}" class="{{ 'on' if loop.first }}"><i></i></button>{% endfor %}</div>
+      <button class="arrow prev" aria-label="{{ c.prev }}"><i class="bi bi-chevron-left"></i></button>
+      <button class="arrow next" aria-label="{{ c.next }}"><i class="bi bi-chevron-right"></i></button>
+    </div>
+  </div>
+  <div class="marquee" aria-hidden="true"><div class="track">{% for _i in range(2) %}{% for t in c.trust %}<span><i class="bi bi-stars"></i>{{ t }}</span>{% endfor %}{% endfor %}</div></div>
+</section>
+
+<section class="sec" id="features"><div class="wrap">
+  <div class="shead rv"><h2>{{ c.feat_h }}</h2><p>{{ c.feat_sub }}</p></div>
+  <div class="bento">
+    {% for ic, t, d in c.features %}
+    <article class="fcard rv f{{ loop.index }}" style="--d:{{ (loop.index0 % 3) * 90 }}ms"><span class="ico"><i class="bi bi-{{ ic }}"></i></span><h3>{{ t }}</h3><p>{{ d }}</p></article>
+    {% endfor %}
+  </div>
+</div></section>
+
+<section class="sec dark" id="how"><div class="wrap">
+  <div class="shead rv"><h2>{{ c.how_h }}</h2></div>
+  <ol class="steps">
+    {% for t, d in c.steps %}<li class="rv" style="--d:{{ loop.index0 * 140 }}ms"><span class="num">{{ loop.index }}</span><h3>{{ t }}</h3><p>{{ d }}</p></li>{% endfor %}
+  </ol>
+  <div class="stats">
+    {% for v, u, l in c.stats %}<div class="rv"><b><span class="cnt" data-to="{{ v }}">{{ v }}</span> <small>{{ u }}</small></b><span>{{ l }}</span></div>{% endfor %}
+  </div>
+</div></section>
+
+<section class="sec" id="modules"><div class="wrap">
+  <div class="shead rv"><h2>{{ c.mod_h }}</h2><p>{{ c.mod_sub }}</p></div>
+  <div class="tabs rv" id="tabs">
+    <div class="tabbar" role="tablist">{% for t in c.tabs %}<button role="tab" class="{{ 'on' if loop.first }}" data-i="{{ loop.index0 }}">{{ t[0] }}</button>{% endfor %}</div>
+    <div class="tabbody">
+      <div class="tabtext"><h3 id="tabT">{{ c.tabs[0][0] }}</h3><p id="tabD">{{ c.tabs[0][1] }}</p></div>
+      <div class="tabimgs">{% for n in tabs %}<img class="timg{{ ' on' if loop.first }}" src="{{ I }}/{{ n }}.jpg" alt="{{ c.tabs[loop.index0][0] }}" loading="lazy">{% endfor %}</div>
+    </div>
+  </div>
+  <div class="phones rv">{% for n in ['27_public_form','28_catalogue','26_parent','25_ticket','29_verify'] %}<figure><img src="{{ I }}/{{ n }}.jpg" alt="" loading="lazy"></figure>{% endfor %}</div>
+</div></section>
+
+<section class="sec soft" id="about"><div class="wrap two">
+  <div class="rv"><h2>{{ c.about_h }}</h2>{% for p in c.about %}<p class="body">{{ p }}</p>{% endfor %}</div>
+  <div class="values">{% for ic, t, d in c.vals %}<div class="val rv" style="--d:{{ loop.index0 * 110 }}ms"><span class="ico"><i class="bi bi-{{ ic }}"></i></span><div><h3>{{ t }}</h3><p>{{ d }}</p></div></div>{% endfor %}</div>
+</div></section>
+
+<section class="sec" id="pricing"><div class="wrap">
+  <div class="shead rv"><h2>{{ c.price_h }}</h2><p>{{ c.price_sub }}</p></div>
+  <div class="plans4">
+    {% for nm, key, price, per, feats, btn in c.plans %}
+    <article class="pcard rv {{ 'best' if key == 'ultimate' }}" style="--d:{{ loop.index0 * 90 }}ms">
+      {% if key == 'ultimate' %}<span class="ribbon">{{ c.best }}</span>{% endif %}
+      <h3><bdi>{{ nm }}</bdi></h3><div class="price"><b>{{ price }}</b><span>{{ per }}</span></div>
+      <ul>{% for f in feats %}<li><i class="bi bi-check-lg"></i>{{ f }}</li>{% endfor %}</ul>
+      {% if key == 'trial' %}<a class="btn o" href="{{ url_for('signup') }}">{{ btn }}</a>
+      {% else %}<a class="btn {{ 'o' if key == 'ultimate' else 'navy' }}" href="{{ wa_plan[key] }}" target="_blank" rel="noopener">{{ btn }}</a>{% endif %}
+    </article>{% endfor %}
+  </div>
+  <p class="note">{{ c.price_note }}</p>
+</div></section>
+
+<section class="sec dark" id="catalogue"><div class="wrap cat rv">
+  <div class="catimgs" aria-hidden="true"><img src="{{ I }}/03_dashboard.jpg" alt="" loading="lazy"><img src="{{ I }}/15_payments.jpg" alt="" loading="lazy"><img src="{{ I }}/11_attendance.jpg" alt="" loading="lazy"></div>
+  <div><h2>{{ c.cat_h }}</h2><p class="body">{{ c.cat_text }}</p>
+    <div class="cta">
+      {% for code, nm in langs.items() %}<a class="btn {{ 'o' if code == lang else 'ghost' }}" href="{{ url_for('static', filename='catalogue/HaithemEduAI-' ~ code ~ '.pdf') }}" download><i class="bi bi-file-earmark-pdf"></i> {{ nm }}</a>{% endfor %}
+    </div><small>{{ c.cat_btn }}</small>
+  </div>
+</div></section>
+
+<section class="sec" id="faq"><div class="wrap narrow">
+  <div class="shead rv"><h2>{{ c.faq_h }}</h2></div>
+  <div class="faq">
+    {% for q, a in c.faq %}<details class="rv" style="--d:{{ (loop.index0 % 4) * 60 }}ms"><summary>{{ q }}<i class="bi bi-plus-lg"></i></summary><div class="ans"><p>{{ a }}</p></div></details>{% endfor %}
+  </div>
+</div></section>
+
+<section class="sec cta-sec" id="signup"><div class="wrap two">
+  <div class="rv"><h2>{{ c.cta_h }}</h2><p class="lead">{{ c.cta_text }}</p>
+    <a class="btn wa lg" href="{{ wa }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> {{ c.wa }}</a></div>
+  <form class="signform rv" method="post" action="{{ url_for('signup') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <label>{{ c.f_school }}<input name="centre_name" required></label>
+    <label>{{ c.f_name }}<input name="name" required></label>
+    <label>{{ c.f_email }}<input type="email" name="email" required></label>
+    <label>{{ c.f_pass }}<input type="password" name="password" minlength="8" required></label>
+    <button class="btn o lg">{{ c.f_btn }}</button>
+    <small>{{ c.f_have }} <a href="{{ url_for('login') }}">{{ c.login }}</a></small>
+  </form>
+</div></section>
+
+<footer class="foot"><div class="wrap"><span class="brand"><span class="mark"><i class="bi bi-mortarboard-fill"></i></span><b>{{ c.name }}</b> · {{ c.foot }}</span>
+<span>© {{ year }} {{ c.name }} — {{ c.rights }}</span></div></footer>
+<a class="wafab" href="{{ wa }}" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a>
+<script>window.LP={tabs:{{ c.tabs|tojson }},slides:{{ c.slides|tojson }}};</script>
+<script src="{{ url_for('static', filename='landing.js') }}?v=1" defer></script>
+</body></html>

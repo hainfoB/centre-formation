@@ -2394,7 +2394,7 @@ def platform():
     recent = sorted(schools, key=lambda sc: sc.created_at, reverse=True)[:8]
     mx = max(list(sign.values()) + [1]), max(list(sales.values()) + [1])
     return render_template("platform.html", g_=g_, by_plan=by_plan, months=months, sign=sign, sales=sales, mx=mx,
-                           soon=soon, top=top, counts=counts, recent=recent, pnames=PLAN_NAMES, plans=PLANS, tab="home")
+                           soon=soon, top=top, counts=counts, recent=recent, pnames={k: _(v) for k, v in PLAN_NAMES.items()}, plans=PLANS, tab="home")
 
 
 @app.route("/plateforme/ecoles", methods=["GET", "POST"])
@@ -2412,7 +2412,7 @@ def platform_schools():
             if plan != "trial":
                 record_sale(sc, plan, "création par la plateforme")
             db.session.commit()
-            flash(f"École « {sc.name} » créée ({PLAN_NAMES[plan]}).", "success")
+            flash(_("École « {name} » créée ({plan}).", name=sc.name, plan=_(PLAN_NAMES[plan])), "success")
             return redirect(url_for("platform_school", sid=sc.id))
     t = today()
     st = request.args.get("statut", "")
@@ -2427,7 +2427,7 @@ def platform_schools():
     items = [sc for sc in items if keep(sc)]
     stats = {sc.id: school_stats(sc) for sc in items}
     return render_template("platform.html", tab="schools", items=items, stats=stats, st=st, q=qtxt,
-                           pnames=PLAN_NAMES, plans=PLANS)
+                           pnames={k: _(v) for k, v in PLAN_NAMES.items()}, plans=PLANS)
 
 
 @app.route("/plateforme/ecoles/<int:sid>", methods=["GET", "POST"])
@@ -2441,36 +2441,36 @@ def platform_school(sid):
             sc.city, sc.phone = f.get("city", "").strip()[:80], f.get("phone", "").strip()[:30]
             sc.notes = f.get("notes", "")[:4000]
             sc.support_until = parse_date(f.get("support_until"))
-            flash("Informations enregistrées.", "success")
+            flash(_("Informations enregistrées."), "success")
         elif act == "plan" and f.get("plan") in PLANS:
             tenancy.apply_plan(sc, f["plan"], today())
             if f["plan"] != "trial":
                 record_sale(sc, f["plan"], f.get("note") or "appliqué par la plateforme")
-            flash(f"{PLAN_NAMES[f['plan']]} appliqué.", "success")
+            flash(_("{plan} appliqué.", plan=_(PLAN_NAMES[f["plan"]])), "success")
         elif act == "expiry":
             sc.expires_on = parse_date(f.get("expires_on"))
-            flash("Date d'expiration modifiée." if sc.expires_on else "Licence rendue définitive.", "success")
+            flash(_("Date d'expiration modifiée.") if sc.expires_on else _("Licence rendue définitive."), "success")
         elif act == "toggle":
             sc.active = not sc.active
-            flash("École réactivée." if sc.active else "École suspendue : ses utilisateurs ne peuvent plus se connecter.", "success")
+            flash(_("École réactivée.") if sc.active else _("École suspendue : ses utilisateurs ne peuvent plus se connecter."), "success")
         elif act in ("user_reset", "user_toggle"):
             u = User.query.filter_by(id=f.get("user_id", type=int), school_id=sc.id).first_or_404()
             if act == "user_reset":
                 pw = secrets.token_urlsafe(8)
                 u.set_password(pw)
-                flash(f"Nouveau mot de passe de {u.name} ({u.email}) : {pw}", "success")
+                flash(_("Nouveau mot de passe de {name} ({email}) : {pw}", name=u.name, email=u.email, pw=pw), "success")
             else:
                 u.active = not u.active
         elif act == "delete":
             if f.get("confirm", "").strip() != sc.name:
-                flash("Tapez le nom exact de l'école pour confirmer la suppression.", "error")
+                flash(_("Tapez le nom exact de l'école pour confirmer la suppression."), "error")
                 return redirect(url_for("platform_school", sid=sc.id))
             for m in (Attendance, Payment, CashEntry, Enrollment, Seance, Formation, Student, Setting, AuditLog, User):
                 m.query.filter_by(school_id=sc.id).delete(synchronize_session=False)
             name = sc.name
             db.session.delete(sc)
             db.session.commit()
-            flash(f"École « {name} » et toutes ses données supprimées.", "success")
+            flash(_("École « {name} » et toutes ses données supprimées.", name=name), "success")
             return redirect(url_for("platform_schools"))
         db.session.commit()
         return redirect(url_for("platform_school", sid=sc.id))
@@ -2481,7 +2481,7 @@ def platform_school(sid):
     with as_school(sc.id):
         sets = Setting.all()
     return render_template("platform.html", tab="school", sc=sc, stx=stx, users=users, keys=keys, logs=logs, sets=sets,
-                           pnames=PLAN_NAMES, plans=PLANS, revenue=sum(PLANS[k.plan][1] for k in keys if k.plan != "trial"))
+                           pnames={k: _(v) for k, v in PLAN_NAMES.items()}, plans=PLANS, revenue=sum(PLANS[k.plan][1] for k in keys if k.plan != "trial"))
 
 
 @app.route("/plateforme/cles", methods=["GET", "POST"])
@@ -2494,14 +2494,14 @@ def platform_keys():
             k = LicenseKey.query.get_or_404(f.get("key_id", type=int))
             if not k.used_school_id:
                 db.session.delete(k)
-                flash("Clé supprimée.", "success")
+                flash(_("Clé supprimée."), "success")
             db.session.commit()
             return redirect(url_for("platform_keys"))
         if f.get("plan") in PLANS:
             plan, bound = f["plan"], f.get("bound_name", "").strip()
             if f.get("kind") == "signed" or plan == "lifetime":
                 if not tenancy.can_sign():
-                    flash("LICENSE_PRIVATE_KEY absente : impossible de signer une clé hors ligne.", "error")
+                    flash(_("LICENSE_PRIVATE_KEY absente : impossible de signer une clé hors ligne."), "error")
                     return redirect(url_for("platform_keys"))
                 code = tenancy.make_signed_key(plan, bound)
             else:
@@ -2519,7 +2519,7 @@ def platform_keys():
     keys = q.order_by(LicenseKey.id.desc()).limit(200).all()
     names = {sc.id: sc.name for sc in School.query.all()}
     return render_template("platform.html", tab="keys", keys=keys, names=names, new_key=new_key, st=st,
-                           pnames=PLAN_NAMES, plans=PLANS, can_sign=tenancy.can_sign(),
+                           pnames={k: _(v) for k, v in PLAN_NAMES.items()}, plans=PLANS, can_sign=tenancy.can_sign(),
                            schools=School.query.order_by(School.name).all())
 
 
@@ -2530,7 +2530,7 @@ def platform_enter(sid):
     session["as_school"] = sc.id
     db.session.add(AuditLog(school_id=sc.id, user=current_user.name, action="platform_view", details="consultation plateforme"))
     db.session.commit()
-    flash(f"Vous consultez « {sc.name} » en tant qu'administrateur de la plateforme.", "success")
+    flash(_("Vous consultez « {name} » en tant qu'administrateur de la plateforme.", name=sc.name), "success")
     return redirect(url_for("dashboard"))
 
 

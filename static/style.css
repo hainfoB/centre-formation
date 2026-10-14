@@ -131,3 +131,19 @@ a.kpi{text-decoration:none;color:inherit;display:block}a.kpi:hover{box-shadow:0 
 .bar i{display:block;width:100%;background:var(--navy);border-radius:5px 5px 0 0;min-height:2px}.bars.o .bar i{background:var(--orange)}
 .bar b{font-size:11px}.bar span{font-size:10px;color:var(--muted);white-space:nowrap}
 .card.danger{border:1.5px solid #fecaca}
+
+/* ── Mobile / RTL hardening ───────────────────────────────────────────────────────────────────── */
+.tw{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+.card{min-width:0}
+@media(max-width:600px){
+  .chart2{gap:3px}.c2{min-width:0}.c2 .pv{display:none}.c2 .l{font-size:9.5px;max-width:100%;overflow:hidden;text-overflow:clip;white-space:nowrap}
+  .tw table{min-width:520px}
+  input,select,textarea{font-size:16px}
+  .btn,button.btn{min-height:42px}
+}
+[dir=rtl] .bi-chevron-right:before,[dir=rtl] .bi-arrow-right:before,[dir=rtl] .bi-box-arrow-up-right:before{transform:none}
+[dir=rtl] .bi-chevron-right,[dir=rtl] .bi-chevron-left,[dir=rtl] .bi-arrow-right,[dir=rtl] .bi-arrow-left,[dir=rtl] .bi-caret-right-fill,[dir=rtl] .bi-caret-left-fill{display:inline-block;transform:scaleX(-1)}
+@media(max-width:600px){.kpi b{font-size:clamp(19px,6vw,24px);white-space:nowrap}}
+select,input,textarea{max-width:100%}
+@media(max-width:600px){.row>select,form.row select{flex:1 1 100%;min-width:0;width:100%}}
+@media(max-width:600px){.head{flex-wrap:wrap}.head>form,.head>.row{width:100%;max-width:100%;min-width:0}.head select{width:100%!important;max-width:100%}}

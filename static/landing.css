@@ -80,7 +80,7 @@ h1,h2,h3{line-height:1.12;margin:0;letter-spacing:-.02em}
 .caption b{color:var(--or);font-size:15px}.caption span{font-size:13.5px;color:#d4dfef;line-height:1.45}
 .caption.swap{opacity:0}
 .dots{display:flex;gap:8px;margin-top:22px;justify-content:center}
-.dots button{flex:1;max-width:64px;height:20px;background:none;border:0;padding:8px 0;cursor:pointer}
+.dots button{flex:1;max-width:64px;height:32px;background:none;border:0;padding:14px 0;cursor:pointer}
 .dots i{display:block;height:4px;border-radius:4px;background:rgba(255,255,255,.22);position:relative;overflow:hidden}
 .dots i::after{content:"";position:absolute;inset:0;background:var(--or);transform:scaleX(0);transform-origin:left}
 [dir=rtl] .dots i::after{transform-origin:right}

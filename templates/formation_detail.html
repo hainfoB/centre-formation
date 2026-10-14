@@ -48,7 +48,7 @@ fetch('{{ url_for("students_api") }}?q='+encodeURIComponent(i.value)).then(funct
 {% elif tab == 'seances' %}
 <div class="card"><div class="tw"><table><tr><th>{{ _("Date") }}</th><th>{{ _("Horaire") }}</th><th>{{ _("Thème") }}</th><th>{{ _("Présents") }}</th><th></th></tr>
 {% for s in stats.seances %}{% set pres = s.attendances.filter_by(status='present').count() + s.attendances.filter_by(status='late').count() %}
-<tr><td class="nowrap"><b>{{ s.day|d }}</b> <span class="xs muted">{{ ['lun','mar','mer','jeu','ven','sam','dim'][s.day.weekday()] }}</span>{% if s.day == today %} <span class="badge b-open">{{ _("aujourd'hui") }}</span>{% endif %}</td>
+<tr><td class="nowrap"><b>{{ s.day|d }}</b> <span class="xs muted">{{ _(['lun','mar','mer','jeu','ven','sam','dim'][s.day.weekday()]) }}</span>{% if s.day == today %} <span class="badge b-open">{{ _("aujourd'hui") }}</span>{% endif %}</td>
 <td class="small">{{ s.time_label or fo.default_time_label() }}</td><td class="small">{{ s.topic or '' }}</td><td class="small">{{ pres if s.day <= today else '' }}</td>
 <td class="nowrap"><a class="btn sm {{ 'o' if s.day==today else 'ghost' }}" href="{{ url_for('seance_view', sid=s.id) }}"><i class="bi bi-check2-square"></i> {{ _("Présences") }}</a> <a class="btn sm ghost" href="{{ url_for('signin_sheet', sid=s.id) }}" target="_blank" title="{{ _("Feuille d'émargement imprimable") }}"><i class="bi bi-printer"></i></a>
 <form method="post" action="{{ url_for('formation_action', fid=fo.id) }}" class="inline">{{ csrf }}<input type="hidden" name="seance_id" value="{{ s.id }}"><button class="btn sm red" name="action" value="del_seance" onclick='return confirm({{ _("Supprimer cette séance et ses présences ?")|tojson }})'><i class="bi bi-trash"></i></button></form></td></tr>
@@ -71,7 +71,7 @@ fetch('{{ url_for("students_api") }}?q='+encodeURIComponent(i.value)).then(funct
 <div class="tw" style="margin-top:10px"><table><tr><th>{{ _("Stagiaire") }}</th>{% for s in stats.held %}<th class="center" title="{{ s.day|d }}">{{ s.day.strftime('%d/%m') }}</th>{% endfor %}<th>{{ _("Taux") }}</th><th>{{ _("Heures") }}</th><th>{{ _("Attestation") }}</th></tr>
 {% for r in stats.rows %}<tr><td class="nowrap"><a href="{{ url_for('student_detail', sid=r.enr.student_id) }}">{{ r.enr.student.full_name }}</a></td>
 {% for s in stats.held %}{% set a = r.marks.get(s.id) %}<td class="center">{% if a and a.status=='present' %}<span style="color:var(--ok)">●</span>{% elif a and a.status=='late' %}<span style="color:var(--warn)" title="{{ _("retard") }}">◐</span>{% elif a and a.status=='excused' %}<span class="muted">E</span>{% else %}<span style="color:var(--err)">○</span>{% endif %}</td>{% endfor %}
-<td><b>{{ r.rate }} %</b></td><td class="small">{{ r.hours }} h</td>
+<td><b>{{ r.rate }} %</b></td><td class="small">{{ r.hours }} {{ _("h") }}</td>
 <td><a class="btn sm {{ 'o' if r.eligible_att else 'ghost' }}" href="{{ url_for('certificate_admin', eid=r.enr.id) }}{{ '' if r.eligible_att else '?force=1' }}" {% if not r.eligible_att %}onclick='return confirm({{ _("Assiduité sous le seuil. Générer quand même ?")|tojson }})'{% endif %}><i class="bi bi-award"></i> {{ _("PDF") }}</a></td></tr>
 {% else %}<tr><td class="muted">{{ _("Aucun inscrit confirmé.") }}</td></tr>{% endfor %}</table></div>
 <p class="xs muted">{{ _("● présent · ◐ retard · E excusé · ○ absent / non pointé") }}</p></div>

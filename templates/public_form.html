@@ -3,7 +3,7 @@
 <div class="hero"><div class="xs" style="opacity:.75">{{ centre.centre_name }}</div><h1>{{ fo.title }}</h1>
 <div>{% if fo.starts_on %}<span class="chip"><i class="bi bi-calendar3"></i> {{ fo.starts_on|d }}{% if fo.ends_on %} {{ '←' if dir=='rtl' else '→' }} {{ fo.ends_on|d }}{% endif %}</span>{% endif %}
 {% if fo.default_time_label() %}<span class="chip"><i class="bi bi-clock"></i> {{ fo.default_time_label() }}</span>{% endif %}
-{% if fo.hours_total %}<span class="chip">{{ fo.hours_total }} h</span>{% endif %}<span class="chip"><i class="bi bi-geo-alt"></i> {{ fo.location if fo.mode != 'online' and fo.location else L[fo.mode] }}</span>
+{% if fo.hours_total %}<span class="chip">{{ fo.hours_total }} {{ _("h") }}</span>{% endif %}<span class="chip"><i class="bi bi-geo-alt"></i> {{ fo.location if fo.mode != 'online' and fo.location else L[fo.mode] }}</span>
 <span class="chip" style="background:var(--orange)">{% if fo.is_free %}{{ _("Gratuite") }}{% else %}{{ fo.total_cost|da }}{% if fo.installments > 1 %} · {{ fo.installments }} {{ _("mensualités") }}{% endif %}{% endif %}</span></div></div>
 
 {% if done %}<div class="card center">

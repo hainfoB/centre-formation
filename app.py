@@ -191,7 +191,8 @@ def add_months(d, k):
 
 
 def fmt_da(n):
-    return f"{int(n or 0):,}".replace(",", " ") + " DA"
+    unit = "دج" if g.get("lang") == "ar" else "DA"
+    return f"{int(n or 0):,}".replace(",", " ") + " " + unit
 
 
 def log(action, details=""):

@@ -80,4 +80,5 @@ document.querySelectorAll('[data-filter]').forEach(function(i){i.oninput=functio
 document.querySelectorAll('form[data-warn]').forEach(function(f){var dirty=false;f.addEventListener('change',function(){dirty=true});f.addEventListener('submit',function(){dirty=false});window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue=''}})});
 })();
 </script>
+<script>document.querySelectorAll("table").forEach(function(t){var p=t.parentElement;if(p&&!p.classList.contains("tw")&&!t.closest(".tw")&&!t.hasAttribute("data-nowrap")){var w=document.createElement("div");w.className="tw";p.insertBefore(w,t);w.appendChild(t)}});</script>
 </body></html>

@@ -4,7 +4,7 @@
 <div class="grid g3" style="margin-bottom:16px"><div class="kpi"><span>{{ _("Dû ce mois") }}</span><b>{{ tot.due|da }}</b></div><div class="kpi" style="border-top-color:#16a34a"><span>{{ _("Déjà payé") }}</span><b>{{ tot.paid|da }}</b></div><div class="kpi o"><span>{{ _("Reste à payer") }}</span><b>{{ tot.rest|da }}</b></div></div>
 {% for r in rows %}{% set u = r.u %}<div class="card"><div class="row" style="justify-content:space-between">
 <div><h2 style="margin:0">{{ u.name }}</h2><div class="small muted">{{ u.phone or u.email }} · {{ L[u.pay_mode] if u.pay_mode else _("Tarif non défini") }}{% if u.pay_rate %} · {{ u.pay_rate|da }}{% endif %}</div></div>
-<div class="row small"><span class="badge">{{ r.n }} {{ _("séances") }}</span><span class="badge">{{ r.hours }} h</span><span class="badge b-due">{{ _("Dû") }} {{ r.due|da }}</span><span class="badge b-paid">{{ _("Payé") }} {{ r.paid|da }}</span>{% if r.rest %}<span class="badge b-overdue">{{ _("Reste") }} {{ r.rest|da }}</span>{% endif %}</div></div>
+<div class="row small"><span class="badge">{{ r.n }} {{ _("séances") }}</span><span class="badge">{{ r.hours }} {{ _("h") }}</span><span class="badge b-due">{{ _("Dû") }} {{ r.due|da }}</span><span class="badge b-paid">{{ _("Payé") }} {{ r.paid|da }}</span>{% if r.rest %}<span class="badge b-overdue">{{ _("Reste") }} {{ r.rest|da }}</span>{% endif %}</div></div>
 <div class="grid g2" style="margin-top:12px">
 <form method="post" class="row" style="align-items:end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="user_id" value="{{ u.id }}"><input type="hidden" name="hours" value="{{ r.hours }}">
 <div><label>{{ _("Montant (DA)") }}</label><input type="number" name="amount" value="{{ r.rest or '' }}" style="width:140px"></div>
@@ -16,7 +16,7 @@
 <div><label>{{ _("Tarif (DA)") }}</label><input type="number" name="pay_rate" value="{{ u.pay_rate or '' }}" style="width:120px"></div>
 <div><label>{{ _("Téléphone") }}</label><input name="phone" value="{{ u.phone or '' }}" style="width:150px"></div>
 <button class="btn sm" name="action" value="rate">{{ _("Enregistrer") }}</button></form></details></div>
-{% if r.seances %}<details style="margin-top:10px"><summary class="small">{{ _("Détail des séances") }} ({{ r.n }})</summary><table style="margin-top:6px">{% for s in r.seances %}<tr><td class="small nowrap">{{ s.day|d }}</td><td class="small">{{ s.formation.title }}</td><td class="small">{{ s.time_label or s.formation.default_time_label() }}</td><td class="small right">{{ (s.duration_minutes()/60)|round(1) }} h</td></tr>{% endfor %}</table></details>{% endif %}
+{% if r.seances %}<details style="margin-top:10px"><summary class="small">{{ _("Détail des séances") }} ({{ r.n }})</summary><table style="margin-top:6px">{% for s in r.seances %}<tr><td class="small nowrap">{{ s.day|d }}</td><td class="small">{{ s.formation.title }}</td><td class="small">{{ s.time_label or s.formation.default_time_label() }}</td><td class="small right">{{ (s.duration_minutes()/60)|round(1) }} {{ _("h") }}</td></tr>{% endfor %}</table></details>{% endif %}
 {% if r.history %}<div class="xs muted" style="margin-top:8px">{{ _("Derniers paiements") }} : {% for h in r.history %}{{ h.on|d }} ({{ h.period }}) {{ h.amount|da }}{{ ' · ' if not loop.last }}{% endfor %}</div>{% endif %}
 </div>{% else %}<div class="card empty"><i class="bi bi-person-badge"></i>{{ _("Aucun enseignant. Créez des comptes « Formateur » dans Utilisateurs.") }}</div>{% endfor %}
 {% endblock %}

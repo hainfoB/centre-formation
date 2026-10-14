@@ -8,3 +8,6 @@ APScheduler>=3.10.0
 openpyxl>=3.1.0
 reportlab>=4.2.0
 segno>=1.6.0
+arabic-reshaper>=3.0.0
+python-bidi>=0.4.2
+cryptography>=42.0

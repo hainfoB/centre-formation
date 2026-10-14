@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% set public = true %}
+{% block title %}{{ _("Créer mon école") }}{% endblock %}
+{% block public %}<div class="signup">
+<div class="card signpitch"><span class="badge b-open">{{ _("30 jours gratuits · sans engagement") }}</span>
+<h1>{{ _("Créez l'espace de votre école en 2 minutes") }}</h1>
+<ul class="ticks"><li>{{ _("Élèves, inscriptions en ligne et import Excel") }}</li><li>{{ _("Présences par QR code et alertes d'absence aux parents") }}</li>
+<li>{{ _("Échéanciers, reçus et relances WhatsApp") }}</li><li>{{ _("Caisse, paie des enseignants et bénéfices") }}</li><li>{{ _("Espace parents, attestations, arabe / français / anglais") }}</li></ul>
+<div class="plans mini">
+<div><b>{{ _("Pass+") }}</b><span>{{ 8000|da }}<br>{{ _("an") }}</span></div>
+<div class="best"><b>{{ _("Ultimate") }}</b><span>{{ 14000|da }}<br>{{ _("2 ans") }}</span></div>
+<div><b>{{ _("À vie") }}</b><span>{{ 60000|da }}<br>{{ _("paiement unique") }}</span></div></div>
+<p class="xs muted">{{ _("Vos données restent les vôtres : export complet à tout moment.") }}</p></div>
+<div class="card"><h2>{{ _("Votre école") }}</h2>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+<div class="fields" style="grid-template-columns:1fr 1fr">
+<div class="span2"><label>{{ _("Nom de l'établissement") }}</label><input name="centre_name" required value="{{ form.centre_name or '' }}" placeholder="{{ _("Ex. : École Excellence Formation") }}"></div>
+<div><label>{{ _("Ville") }}</label><input name="city" value="{{ form.city or '' }}"></div>
+<div><label>{{ _("Téléphone (WhatsApp)") }}</label><input name="phone" inputmode="tel" value="{{ form.phone or '' }}"></div>
+<div class="span2"><label>{{ _("Votre nom (directeur / gérant)") }}</label><input name="name" required value="{{ form.name or '' }}"></div>
+<div><label>{{ _("Email") }}</label><input type="email" name="email" required value="{{ form.email or '' }}"></div>
+<div><label>{{ _("Mot de passe (8 caractères min.)") }}</label><input type="password" name="password" minlength="8" required></div>
+<button class="btn o span2">{{ _("Créer mon école gratuitement") }}</button></div></form>
+<p class="small muted center">{{ _("Déjà inscrit ?") }} <a href="{{ url_for('login') }}">{{ _("Se connecter") }}</a></p></div>
+</div>{% endblock %}

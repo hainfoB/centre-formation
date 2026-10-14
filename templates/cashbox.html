@@ -1,7 +1,44 @@
-{% extends "base.html" %}{% block title %}Caisse{% endblock %}{% block content %}<div class="head"><h1>Caisse</h1>
-<form class="row"><input type="date" name="du" value="{{ d1 }}" style="width:auto"><input type="date" name="au" value="{{ d2 }}" style="width:auto"><button class="btn sm">Filtrer</button><button class="btn sm ghost" name="export" value="1"><i class="bi bi-file-earmark-excel"></i> Export</button></form></div>
-<div class="grid g4" style="margin-bottom:16px"><div class="kpi o"><span>Total encaissé</span><b>{{ total|da }}</b></div>{% for m, v in by_method.items() %}<div class="kpi"><span>{{ L.get(m, m) }}</span><b>{{ v|da }}</b></div>{% endfor %}</div>
-<div class="card"><div class="tw"><table><tr><th>Date</th><th>Reçu</th><th>Stagiaire</th><th>Formation</th><th>Mode</th><th class="right">Montant</th><th>Par</th></tr>
-{% for p in pays %}<tr><td class="nowrap">{{ p.paid_on|d }}</td><td><a href="{{ url_for('receipt', pid=p.id) }}" target="_blank">{{ p.receipt_no }}</a></td><td>{{ p.enrollment.student.full_name }}</td><td class="small">{{ p.enrollment.formation.title }}<div class="xs muted">{{ p.label }}</div></td>
-<td class="small">{{ L.get(p.method, p.method) }}</td><td class="right nowrap"><b>{{ p.amount|da }}</b></td><td class="xs muted">{{ p.collected_by or '' }}</td></tr>
-{% else %}<tr><td colspan="7" class="muted">Aucun encaissement sur la période.</td></tr>{% endfor %}</table></div></div>{% endblock %}
+{% extends "base.html" %}{% block title %}{{ _("Caisse") }}{% endblock %}{% block content %}
+<div class="head"><div><h1>{{ _("Caisse de l'école") }}</h1><div class="small muted">{{ _("Tous les mouvements : frais encaissés, charges, salaires et autres recettes.") }}</div></div>
+<form class="row"><input type="date" name="du" value="{{ d1 }}" style="width:auto" aria-label="{{ _('Du') }}"><input type="date" name="au" value="{{ d2 }}" style="width:auto" aria-label="{{ _('Au') }}">
+<select name="f" style="width:auto" aria-label="{{ _('Filtre') }}"><option value="">{{ _("Tous les mouvements") }}</option><option value="fees" {{ 'selected' if flt=='fees' }}>{{ _("Frais de formation") }}</option><option value="in" {{ 'selected' if flt=='in' }}>{{ _("Entrées") }}</option><option value="out" {{ 'selected' if flt=='out' }}>{{ _("Sorties") }}</option><option value="salaire" {{ 'selected' if flt=='salaire' }}>{{ _("Salaires") }}</option></select>
+<button class="btn sm">{{ _("Filtrer") }}</button><button class="btn sm ghost" name="export" value="1"><i class="bi bi-file-earmark-excel"></i> {{ _("Exporter") }}</button></form></div>
+
+<div class="grid g4" style="margin-bottom:16px">
+  <div class="kpi o"><span>{{ _("Solde en caisse (espèces)") }}</span><b>{{ bal.cash|da }}</b><small>{{ _("aujourd'hui") }}</small></div>
+  <div class="kpi"><span>{{ _("Solde CCP / banque") }}</span><b>{{ bal.bank|da }}</b><small>{{ _("aujourd'hui") }}</small></div>
+  <div class="kpi" style="border-top-color:#16a34a"><span>{{ _("Entrées de la période") }}</span><b style="color:var(--ok)">+ {{ tin|da }}</b></div>
+  <div class="kpi" style="border-top-color:#dc2626"><span>{{ _("Sorties de la période") }}</span><b style="color:var(--err)">− {{ tout|da }}</b><small>{{ _("Solde de la période") }} : <b>{{ (tin - tout)|da }}</b></small></div>
+</div>
+
+<div class="grid g2">
+<details class="card" {{ 'open' if not lines }}><summary><i class="bi bi-dash-circle" style="color:#dc2626"></i> {{ _("Enregistrer une dépense") }}</summary>
+<form method="post" style="margin-top:12px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="kind" value="out"><div class="fields">
+<div><label>{{ _("Catégorie") }}</label><select name="category">{% for c in cash_out if c != 'salaire' %}<option value="{{ c }}">{{ L[c] }}</option>{% endfor %}</select></div>
+<div><label>{{ _("Montant (DA)") }}</label><input type="number" name="amount" min="1" required></div>
+<div><label>{{ _("Date") }}</label><input type="date" name="on" value="{{ today }}"></div>
+<div><label>{{ _("Mode") }}</label><select name="method">{% for m in pay_methods %}<option value="{{ m }}">{{ L[m] }}</option>{% endfor %}</select></div>
+<div class="full"><label>{{ _("Libellé") }}</label><input name="label" placeholder="{{ _('Ex. : facture Sonelgaz septembre') }}"></div>
+<div><label>{{ _("N° de facture / chèque") }}</label><input name="ref"></div></div>
+<div style="margin-top:12px"><button class="btn red">{{ _("Enregistrer la dépense") }}</button> <a class="small" href="{{ url_for('teachers') }}">{{ _("Payer un enseignant") }} →</a></div></form></details>
+<details class="card"><summary><i class="bi bi-plus-circle" style="color:#16a34a"></i> {{ _("Enregistrer une autre recette") }}</summary>
+<form method="post" style="margin-top:12px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="kind" value="in"><div class="fields">
+<div><label>{{ _("Catégorie") }}</label><select name="category">{% for c in cash_in %}<option value="{{ c }}">{{ L[c] }}</option>{% endfor %}</select></div>
+<div><label>{{ _("Montant (DA)") }}</label><input type="number" name="amount" min="1" required></div>
+<div><label>{{ _("Date") }}</label><input type="date" name="on" value="{{ today }}"></div>
+<div><label>{{ _("Mode") }}</label><select name="method">{% for m in pay_methods %}<option value="{{ m }}">{{ L[m] }}</option>{% endfor %}</select></div>
+<div class="full"><label>{{ _("Libellé") }}</label><input name="label"></div></div>
+<p class="xs muted">{{ _("Les frais des élèves s'enregistrent automatiquement depuis la page Paiements de chaque formation.") }}</p>
+<div style="margin-top:8px"><button class="btn green">{{ _("Enregistrer la recette") }}</button></div></form></details>
+</div>
+
+<div class="card">{% if lines|length > 8 %}<div class="toolbar"><input type="search" data-filter="cj" placeholder="{{ _('Filtrer la liste…') }}"></div>{% endif %}
+<div class="tw"><table id="cj"><thead><tr><th>{{ _("Date") }}</th><th>{{ _("Catégorie") }}</th><th>{{ _("Libellé") }}</th><th>{{ _("Mode") }}</th><th class="right">{{ _("Montant") }}</th><th>{{ _("Référence") }}</th><th></th></tr></thead>
+{% for x in lines %}<tr data-row><td class="nowrap">{{ x.on|d }}</td><td><span class="badge {{ 'b-paid' if x.kind=='in' else 'b-overdue' }}">{{ L.get(x.cat, x.cat) }}</span></td>
+<td class="small">{{ x.label }}{% if x.sub %}<div class="xs muted">{{ x.sub|plabel }}</div>{% endif %}</td><td class="small">{{ L.get(x.method, x.method) }}</td>
+<td class="right nowrap"><b style="color:{{ 'var(--ok)' if x.kind=='in' else 'var(--err)' }}">{{ '+' if x.kind=='in' else '−' }} {{ x.amount|da }}</b></td>
+<td class="xs">{% if x.pid %}<a href="{{ url_for('receipt', pid=x.pid) }}" target="_blank">{{ x.ref }}</a>{% else %}{{ x.ref or '' }}{% endif %}<div class="muted">{{ x.by or '' }}</div></td>
+<td>{% if x.eid and current_user.can('admin') %}<form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="entry_id" value="{{ x.eid }}"><button class="btn sm red" name="action" value="delete" aria-label="{{ _('Supprimer') }}" onclick="return confirm('{{ _('Supprimer ce mouvement ?') }}')"><i class="bi bi-trash"></i></button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="7"><div class="empty"><i class="bi bi-cash-stack"></i>{{ _("Aucun mouvement sur la période.") }}</div></td></tr>{% endfor %}</table></div>
+{% if by_method %}<div class="row small" style="margin-top:10px">{% for m, v in by_method.items() %}<span class="badge">{{ L.get(m, m) }} : {{ v|da }}</span>{% endfor %}</div>{% endif %}</div>
+{% endblock %}

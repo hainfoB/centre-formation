@@ -1,0 +1,40 @@
+{% extends "base.html" %}{% block title %}{{ _("Bénéfices") }}{% endblock %}{% block content %}
+{% macro delta(a, b) %}{% if b %}{% set d = ((a - b) * 100 / (b|abs))|round|int %}<small style="color:{{ 'var(--ok)' if d >= 0 else 'var(--err)' }}">{{ '+' if d >= 0 }}{{ d }} % {{ _("vs période précédente") }}</small>{% endif %}{% endmacro %}
+<div class="head"><div><h1>{{ _("Recettes, charges et bénéfice") }}</h1><div class="small muted">{{ _("Calculé à partir des paiements encaissés et des mouvements de caisse.") }}</div></div>
+<div class="row"><div class="seg" role="group" aria-label="{{ _('Période') }}">{% for k, lab in (('month', _('Mois')), ('quarter', _('Trimestre')), ('year', _('Année'))) %}<a href="?p={{ k }}&y={{ per.y }}" class="{{ 'on' if per.kind==k }}">{{ lab }}</a>{% endfor %}</div>
+<a class="btn sm ghost" href="?p={{ per.prev.p }}&y={{ per.prev.y }}&n={{ per.prev.n }}" aria-label="{{ _('Précédent') }}"><i class="bi bi-chevron-{{ 'right' if dir=='rtl' else 'left' }}"></i></a>
+<b style="min-width:120px;text-align:center">{{ label }}</b>
+<a class="btn sm ghost" href="?p={{ per.next.p }}&y={{ per.next.y }}&n={{ per.next.n }}" aria-label="{{ _('Suivant') }}"><i class="bi bi-chevron-{{ 'left' if dir=='rtl' else 'right' }}"></i></a>
+<a class="btn sm ghost" href="?p={{ per.kind }}&y={{ per.y }}&n={{ per.n }}&export=1"><i class="bi bi-file-earmark-excel"></i> {{ _("Exporter") }} {{ per.y }}</a></div></div>
+
+<div class="grid g4" style="margin-bottom:16px">
+  <div class="kpi" style="border-top-color:#16a34a"><span>{{ _("Recettes") }}</span><b>{{ tot.income|da }}</b>{{ delta(tot.income, prev.income) }}</div>
+  <div class="kpi" style="border-top-color:#dc2626"><span>{{ _("Charges") }}</span><b>{{ tot.expense|da }}</b>{{ delta(tot.expense, prev.expense) }}</div>
+  <div class="kpi o"><span>{{ _("Bénéfice net") }}</span><b style="color:{{ 'var(--ok)' if tot.profit >= 0 else 'var(--err)' }}">{{ tot.profit|da }}</b>{{ delta(tot.profit, prev.profit) }}</div>
+  <div class="kpi"><span>{{ _("Marge") }}</span><b>{{ tot.margin }} %</b><small>{{ _("Trésorerie actuelle") }} : {{ bal.total|da }}</small></div>
+</div>
+
+<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ _("Évolution mensuelle") }} {{ per.y }}</h2>
+<div class="legend small"><span class="lg" style="--c:#0b2545">{{ _("Recettes") }}</span><span class="lg" style="--c:#f97316">{{ _("Charges") }}</span></div></div>
+<div class="chart2" role="img" aria-label="{{ _('Recettes et charges par mois') }}">{% for x in months %}<a class="c2" href="?p=month&y={{ per.y }}&n={{ x.m }}" title="{{ x.label }} : {{ _('Recettes') }} {{ x.income|da }} · {{ _('Charges') }} {{ x.expense|da }} · {{ _('Bénéfice') }} {{ x.profit|da }}">
+<span class="bars"><i class="bi1" style="height:{{ (x.income*100/mmax)|round }}%"></i><i class="bi2" style="height:{{ (x.expense*100/mmax)|round }}%"></i></span>
+<span class="pv" style="color:{{ 'var(--ok)' if x.profit >= 0 else 'var(--err)' }}">{{ ((x.profit/1000)|round(0)|int) }}k</span><span class="l {{ 'on' if per.kind=='month' and per.n==x.m }}">{{ x.label }}</span></a>{% endfor %}</div>
+<p class="xs muted" style="margin:4px 0 0">{{ _("Sous chaque mois : bénéfice en milliers de DA. Cliquez sur un mois pour le détail.") }}</p></div>
+
+<div class="grid g2">
+<div class="card"><h2>{{ _("Recettes") }} — {{ label }}</h2><table>
+<tr><td><b>{{ _("Frais de formation et scolarité") }}</b></td><td class="right"><b>{{ tot.fees|da }}</b></td></tr>
+{% for f in tot.by_formation %}<tr><td class="small" style="padding-inline-start:22px"><a href="{{ url_for('formation_detail', fid=f.id) }}">{{ f.title }}</a></td><td class="right small">{{ f.amount|da }}</td></tr>{% endfor %}
+{% for c, a in tot.other_in.items() %}<tr><td>{{ L[c] }}</td><td class="right">{{ a|da }}</td></tr>{% endfor %}
+<tr><td><b>{{ _("Total") }}</b></td><td class="right"><b style="color:var(--ok)">{{ tot.income|da }}</b></td></tr></table></div>
+<div class="card"><h2>{{ _("Charges") }} — {{ label }}</h2>
+{% if tot.out %}<table>{% for c, a in tot.out|dictsort(by='value', reverse=true) %}<tr><td>{{ L[c] }}<div class="bar" style="margin-top:4px"><i style="width:{{ (a*100/(tot.expense or 1))|round }}%"></i></div></td><td class="right nowrap">{{ a|da }}<div class="xs muted">{{ (a*100/(tot.expense or 1))|round|int }} %</div></td></tr>{% endfor %}
+<tr><td><b>{{ _("Total") }}</b></td><td class="right"><b style="color:var(--err)">{{ tot.expense|da }}</b></td></tr></table>
+{% else %}<div class="empty"><i class="bi bi-receipt"></i>{{ _("Aucune charge enregistrée.") }} <a href="{{ url_for('cashbox') }}">{{ _("Ajouter une dépense") }}</a></div>{% endif %}</div>
+</div>
+
+<div class="card"><h2>{{ _("Bilan trimestriel et annuel") }} {{ per.y }}</h2><div class="tw"><table><thead><tr><th></th>{% for q in quarters %}<th class="right"><a href="?p=quarter&y={{ per.y }}&n={{ q.q }}">T{{ q.q }}</a></th>{% endfor %}<th class="right">{{ _("Année") }}</th></tr></thead>
+<tr><td>{{ _("Recettes") }}</td>{% for q in quarters %}<td class="right">{{ q.income|da }}</td>{% endfor %}<td class="right"><b>{{ ytot.income|da }}</b></td></tr>
+<tr><td>{{ _("Charges") }}</td>{% for q in quarters %}<td class="right">{{ q.expense|da }}</td>{% endfor %}<td class="right"><b>{{ ytot.expense|da }}</b></td></tr>
+<tr><td><b>{{ _("Bénéfice") }}</b></td>{% for q in quarters %}<td class="right"><b style="color:{{ 'var(--ok)' if q.profit >= 0 else 'var(--err)' }}">{{ q.profit|da }}</b></td>{% endfor %}<td class="right"><b style="color:{{ 'var(--ok)' if ytot.profit >= 0 else 'var(--err)' }}">{{ ytot.profit|da }}</b></td></tr></table></div></div>
+{% endblock %}

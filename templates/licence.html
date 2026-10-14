@@ -1,0 +1,44 @@
+{% extends "base.html" %}{% block title %}{{ _("Abonnement & données") }}{% endblock %}{% block content %}
+<div class="head"><h1>{{ _("Abonnement & données") }}</h1></div>
+{% set left = sc.days_left(today) %}
+<div class="card licstate {{ 'exp' if sc.expired(today) else ('warn' if left is not none and left <= 15 else 'ok') }}">
+  <div><span class="xs muted">{{ _("Offre actuelle") }}</span><h2 style="margin:2px 0">{{ _(names[sc.plan]) }}</h2>
+  {% if sc.expires_on is none %}<p class="small">{{ _("Licence définitive.") }}{% if sc.support_until %} {{ _("Service client gratuit jusqu'au {d}.", d=sc.support_until|d) }}{% endif %}</p>
+  {% elif sc.expired(today) %}<p class="small"><b>{{ _("Expirée le {d}.", d=sc.expires_on|d) }}</b> {{ _("Vos données sont intactes et consultables ; l'ajout et la modification sont bloqués jusqu'au renouvellement.") }}</p>
+  {% else %}<p class="small">{{ _("Valable jusqu'au {d} — {n} jour(s) restant(s).", d=sc.expires_on|d, n=left) }}</p>{% endif %}</div>
+  <i class="bi {{ 'bi-lock-fill' if sc.expired(today) else 'bi-patch-check-fill' }} licicon"></i>
+</div>
+
+<div class="card"><h2>{{ _("Activer une clé de licence") }}</h2>
+<p class="small muted">{{ _("Après paiement, vous recevez une clé sur WhatsApp. Collez-la ici : la durée s'ajoute à votre licence actuelle, sans rien perdre.") }}</p>
+<form method="post" class="row" style="gap:8px;flex-wrap:wrap"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input name="key" required placeholder="HEDU-XXXX-XXXX-XXXX" style="flex:1;min-width:240px;font-family:monospace" dir="ltr" autocomplete="off"><button class="btn o"><i class="bi bi-key"></i> {{ _("Activer") }}</button></form></div>
+
+<div class="plans">
+{% for code in ['pass','ultimate','lifetime'] %}{% set days, price = plans[code] %}
+<div class="card plan {{ 'best' if code=='ultimate' }}">
+  {% if code=='ultimate' %}<span class="ribbon">{{ _("Le plus choisi") }}</span>{% endif %}
+  <h3>{{ _(names[code]) }}</h3><div class="price">{{ price|da }}</div>
+  <div class="xs muted">{% if code=='pass' %}{{ _("soit {m} par mois", m=(price/12)|round|int|da) }}{% elif code=='ultimate' %}{{ _("soit {m} par mois — 3 mois offerts", m=(price/24)|round|int|da) }}{% else %}{{ _("paiement unique") }}{% endif %}</div>
+  <ul class="ticks small">
+    <li>{{ _("Toutes les fonctions, utilisateurs illimités") }}</li>
+    {% if code=='lifetime' %}<li>{{ _("Version locale sur le PC de l'école, sans Internet") }}</li><li>{{ _("Réseau local : téléphones et PC de l'école") }}</li><li>{{ _("1 an de version en ligne offert, puis en option") }}</li><li>{{ _("Service client gratuit pendant 6 mois") }}</li>
+    {% else %}<li>{{ _("En ligne : parents et enseignants depuis leur téléphone") }}</li><li>{{ _("Hébergement, sauvegardes et mises à jour inclus") }}</li><li>{{ _("Support WhatsApp inclus") }}</li>{% endif %}
+  </ul>
+  <a class="btn {{ 'o' if code=='ultimate' else 'ghost' }}" href="{{ sales_wa(code) }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> {{ _("Commander") }}</a>
+</div>{% endfor %}
+</div>
+
+<div class="card"><h2>{{ _("Transférer vos données") }}</h2>
+<p class="small muted">{{ _("Passez de la version locale à la version en ligne (ou l'inverse), ou gardez une copie de sécurité : le fichier contient élèves, formations, séances, présences, paiements, caisse et paramètres.") }}</p>
+<div class="grid g2">
+<div><h3 class="small">{{ _("1. Exporter") }}</h3><a class="btn ghost" href="{{ url_for('data_export') }}"><i class="bi bi-download"></i> {{ _("Télécharger mes données (.hedu)") }}</a>
+<p class="xs muted">{{ _("Pour un tableau lisible dans Excel, utilisez la sauvegarde Excel des Paramètres.") }}</p></div>
+<div><h3 class="small">{{ _("2. Importer sur l'autre version") }}</h3>
+<form method="post" action="{{ url_for('data_import') }}" enctype="multipart/form-data" onsubmit='return confirm({{ _("Toutes les données actuelles de cette école seront remplacées par celles du fichier. Continuer ?")|tojson }})'>
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="file" name="file" accept=".hedu" required>
+<label class="xs" style="margin-top:8px;display:block">{{ _("Tapez REMPLACER pour confirmer") }}</label><input name="confirm" required autocomplete="off" style="max-width:200px">
+<button class="btn red sm" style="margin-top:8px"><i class="bi bi-upload"></i> {{ _("Importer et remplacer") }}</button></form></div>
+</div></div>
+{% endblock %}

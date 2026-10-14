@@ -1,6 +1,7 @@
 """Centre de formation — gestion des formations, inscriptions, séances, présences (QR), paiements,
 relances, attestations et espace parents. Flask + SQLAlchemy, prêt pour Railway."""
 import calendar
+from urllib.parse import urlencode
 import hashlib
 import hmac
 import io
@@ -16,9 +17,13 @@ from flask_login import LoginManager, current_user, login_required, login_user, 
 from flask_wtf.csrf import CSRFProtect
 from sqlalchemy import func, or_
 
-from models import (FORMATION_STATUSES, PAY_METHODS, ROLES, Attendance, AuditLog, Enrollment, Formation, Payment,
-                    Seance, Setting, Student, User, db)
+from flask import g
+from models import (CASH_IN, CASH_OUT, FORMATION_STATUSES, PAY_METHODS, PLANS, ROLES, Attendance, AuditLog, CashEntry,
+                    Enrollment, Formation, LicenseKey, Payment, School, Seance, Setting, Student, User, db)
+import tenancy
+from tenancy import as_school, unscoped
 from notify import html_mail, send_email, wa_link
+from i18n import LANGS, Labels, gettext as _
 
 # ── App setup ─────────────────────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -42,6 +47,8 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 app.config["WTF_CSRF_TIME_LIMIT"] = None
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 APP_URL = os.environ.get("APP_URL", "").rstrip("/")
+LOCAL = os.environ.get("APP_MODE") == "local"            # installation sur le PC de l'école (offre à vie)
+SALES_PHONE = os.environ.get("SALES_PHONE", "0796302802")  # WhatsApp du vendeur (renouvellements)
 UTC_OFFSET = int(os.environ.get("UTC_OFFSET_HOURS", "1"))   # Algérie = UTC+1
 
 db.init_app(app)
@@ -53,7 +60,8 @@ login_manager.login_message = "Veuillez vous connecter."
 
 @login_manager.user_loader
 def load_user(uid):
-    return db.session.get(User, int(uid))
+    with unscoped():
+        return db.session.get(User, int(uid))
 
 
 def auto_migrate():
@@ -76,6 +84,7 @@ def auto_migrate():
 with app.app_context():
     db.create_all()
     auto_migrate()
+    tenancy.bootstrap(db.engine, (datetime.utcnow() + timedelta(hours=UTC_OFFSET)).date())
 
 
 @app.after_request
@@ -165,10 +174,12 @@ def slugify(text, exclude_id=None):
     base = re.sub(r"[^a-z0-9]+", "-", text.lower().encode("ascii", "ignore").decode()).strip("-")[:60] or "formation"
     slug, i = base, 2
     while True:
-        q = Formation.query.filter_by(slug=slug)
+        with unscoped():
+            q = Formation.query.filter_by(slug=slug)
         if exclude_id:
             q = q.filter(Formation.id != exclude_id)
-        if not q.first():
+            hit = q.first()
+        if not hit:
             return slug
         slug, i = f"{base}-{i}", i + 1
 
@@ -194,14 +205,14 @@ def role_required(what):
         @login_required
         def inner(*a, **kw):
             if not current_user.can(what):
-                flash("Accès réservé.", "error")
+                flash(_("Accès réservé."), "error")
                 return redirect(url_for("dashboard"))
             return fn(*a, **kw)
         return inner
     return deco
 
 
-LABELS = {
+LABELS = Labels({
     "draft": "Brouillon", "open": "Inscriptions ouvertes", "running": "En cours", "done": "Terminée",
     "pending": "En attente", "confirmed": "Confirmé", "waitlist": "Liste d'attente", "cancelled": "Annulé",
     "present": "Présent", "late": "Retard", "absent": "Absent", "excused": "Excusé",
@@ -210,7 +221,14 @@ LABELS = {
     "onsite": "Présentiel", "online": "En ligne", "hybrid": "Hybride",
     "admin": "Administrateur", "secretaire": "Secrétariat", "formateur": "Formateur",
     "ticket": "QR ticket", "room": "QR salle", "code": "Code", "manual": "Manuel",
-}
+    "in": "Entrée", "out": "Sortie", "fees": "Frais de formation",
+    "salaire": "Salaires enseignants", "loyer": "Loyer", "energie": "Électricité, eau, gaz", "telecom": "Internet et téléphone",
+    "fournitures": "Fournitures", "entretien": "Entretien et ménage", "publicite": "Publicité", "impots": "Impôts et CNAS",
+    "transport": "Transport", "equipement": "Équipement", "autre_charge": "Autre charge",
+    "autre_recette": "Autre recette", "subvention": "Subvention", "vente": "Vente (livres, tenues…)", "apport": "Apport du gérant",
+    "hour": "À l'heure", "seance": "À la séance", "month": "Fixe mensuel",
+})
+L = LABELS
 
 
 @app.context_processor
@@ -221,12 +239,47 @@ def inject():
                           .filter(Payment.status == "due", Payment.due_on < today(), Enrollment.status == "confirmed",
                                   Formation.status != "draft").count())
         nav["pending"] = Enrollment.query.filter_by(status="pending").count()
-    return {"nav": nav, "L": LABELS, "centre": Setting.all(), "today": today(), "fmt_da": fmt_da, "wa": wa_link,
+    from flask import g
+    lang = getattr(g, "lang", "fr")
+    args = {k: v for k, v in request.args.items() if k != "lang"} if request else {}
+    return {"_": _, "lang": lang, "dir": "rtl" if lang == "ar" else "ltr", "LANGS": LANGS,
+            "lang_url": lambda code: request.path + "?" + urlencode({**args, "lang": code}),
+            "nav": nav, "L": LABELS, "centre": centre_settings(), "today": today(), "fmt_da": fmt_da, "wa": wa_link,
             "email_on": bool(os.environ.get("BREVO_API_KEY") or os.environ.get("SMTP_HOST")),
-            "roles": ROLES, "pay_methods": PAY_METHODS, "statuses": FORMATION_STATUSES}
+            "roles": ROLES, "pay_methods": PAY_METHODS, "statuses": FORMATION_STATUSES,
+            "school": g.get("school"), "lic": licence_info(g.get("school")), "LOCAL": LOCAL}
 
 
-app.jinja_env.filters["da"] = fmt_da
+def centre_settings():
+    if g.get("school_id"):
+        return Setting.all()
+    return {**Setting.DEFAULTS, "centre_name": "HaithemEduAI", "centre_tagline": "Gestion des écoles et centres de formation"}
+
+
+def licence_info(sc):
+    if not sc:
+        return None
+    left = sc.days_left(today())
+    return {"plan": sc.plan, "left": left, "expired": sc.expired(today()),
+            "warn": left is not None and (left <= 15 or sc.plan == "trial"),
+            "renew_wa": wa_link(SALES_PHONE, _("Bonjour, je souhaite renouveler la licence HaithemEduAI de « {name} ».",
+                                                name=sc.name))}
+
+
+def plabel(label):
+    """Translate a stored instalment label (« Mensualité 2/9 », « Reliquat … »)."""
+    label = label or ""
+    if label.startswith("Reliquat "):
+        return _("Reliquat") + " " + plabel(label[9:])
+    m = re.match(r"^Mensualité (\d+)/(\d+)$", label)
+    if m:
+        return _("Mensualité {k}/{n}", k=m[1], n=m[2])
+    return _(label)
+
+
+app.jinja_env.filters["plabel"] = plabel
+app.jinja_env.filters["ltr"] = lambda v: ("\u2066" + str(v) + "\u2069") if v else ""   # phones, codes in Arabic pages
+app.jinja_env.filters["da"] = lambda n: "\u2066" + fmt_da(n) + "\u2069"   # isolated: stays "12 000 DA" in Arabic pages
 app.jinja_env.filters["d"] = lambda d: d.strftime("%d/%m/%Y") if d else ""
 app.jinja_env.filters["hm"] = lambda dt: (dt + timedelta(hours=UTC_OFFSET)).strftime("%H:%M") if dt else ""
 
@@ -238,34 +291,152 @@ def qr_svg(text, scale=6):
 
 # ── First run / auth ──────────────────────────────────────────────────────────────────────────────
 @app.before_request
-def first_run():
-    if request.endpoint in ("setup", "static") or request.path.startswith("/static"):
+def pick_lang():
+    from flask import g
+    lang = request.args.get("lang")
+    if lang in LANGS:
+        session["lang"] = lang
+        if current_user.is_authenticated and current_user.lang != lang:
+            current_user.lang = lang
+            db.session.commit()
+    lang = session.get("lang") or (current_user.lang if current_user.is_authenticated else None)
+    if lang not in LANGS:
+        try:
+            lang = Setting.get("default_lang")
+        except Exception:  # noqa: BLE001
+            lang = "fr"
+    g.lang = lang if lang in LANGS else "fr"
+
+
+# Public links resolve their school from the token / slug they carry.
+_PUBLIC = {"scan_page": (Seance, "scan_token", "token"), "scan_check": (Seance, "scan_token", "token"),
+           "room_display": (Seance, "room_token", "token"), "room_qr": (Seance, "room_token", "token"),
+           "room_checkin": (Seance, "id", "sid"), "code_presence": (Formation, "slug", "slug"),
+           "public_form": (Formation, "slug", "slug"), "certificate_public": (Enrollment, "token", "token"),
+           "verify": (Enrollment, "token", "token"), "ticket": (Enrollment, "token", "token"),
+           "ticket_code": (Enrollment, "token", "token"), "parent_space": (Student, "parent_token", "token"),
+           "catalogue": (School, "slug", "sslug")}
+_READONLY_OK = {"licence", "logout", "login", "account", "data_export", "signup", "platform", "static"}
+
+
+def tenant_context():
+    """Pick the current school: the signed-in user's, or the one a public link belongs to."""
+    g.school_id, g.unscoped, g.school = None, False, None
+    if request.path.startswith("/static"):
         return None
-    if not User.query.first():
+    if current_user.is_authenticated and request.endpoint != "catalogue":
+        g.school_id = current_user.school_id
+    elif request.endpoint in _PUBLIC and request.view_args:
+        model, col, arg = _PUBLIC[request.endpoint]
+        with unscoped():
+            obj = model.query.filter(getattr(model, col) == request.view_args.get(arg)).first()
+        if obj is not None:
+            g.school_id = obj.id if model is School else obj.school_id
+    elif request.endpoint == "catalogue_default" and LOCAL:
+        with unscoped():
+            first = School.query.order_by(School.id).first()
+        g.school_id = first.id if first else None
+    if g.school_id:
+        with unscoped():
+            g.school = db.session.get(School, g.school_id)
+        sc = g.school
+        if sc and not sc.active and current_user.is_authenticated and not current_user.is_super:
+            logout_user()
+            flash(_("Le compte de cette école est suspendu. Contactez-nous sur WhatsApp."), "error")
+            return redirect(url_for("login"))
+        if sc and sc.expired(today()) and request.method == "POST" and request.endpoint not in _READONLY_OK:
+            if current_user.is_authenticated:
+                flash(_("Licence expirée : l'application est en lecture seule. Renouvelez pour continuer."), "error")
+                return redirect(url_for("licence"))
+            return render_template("message.html", title=_("Service indisponible"),
+                                   text=_("Ce service est momentanément indisponible. Contactez l'établissement.")), 403
+    return None
+
+
+app.before_request_funcs.setdefault(None, []).insert(0, tenant_context)
+
+
+@app.before_request
+def first_run():
+    if request.endpoint in ("setup", "static", "health") or request.path.startswith("/static"):
+        return None
+    with unscoped():
+        empty = not User.query.first()
+    if empty:
         return redirect(url_for("setup"))
+    return None
+
+
+def create_school(name, admin_name, email, pw, phone="", city="", plan="trial", super_=False):
+    sc = School(name=name[:160], slug=tenancy.school_slug(name), phone=phone[:30], city=city[:80])
+    tenancy.apply_plan(sc, plan, today())
+    db.session.add(sc)
+    db.session.flush()
+    with as_school(sc.id):
+        u = User(name=admin_name[:120], email=email, role="admin", school_id=sc.id, is_super=super_ or None)
+        u.set_password(pw)
+        db.session.add(u)
+        Setting.set("centre_name", name[:120])
+        if phone:
+            Setting.set("centre_phone", phone[:30])
+        db.session.add(AuditLog(school_id=sc.id, user=admin_name[:120], action="school_created", details=plan))
+        db.session.flush()
+    return sc, u
+
+
+def _signup_form_errors(f):
+    email, pw = f.get("email", "").strip().lower(), f.get("password", "")
+    if not _EMAIL_RE.match(email) or len(pw) < 8 or not f.get("name", "").strip() or not f.get("centre_name", "").strip():
+        return _("Nom, établissement, email valide et mot de passe (8 caractères min.) requis.")
+    with unscoped():
+        if User.query.filter_by(email=email).first():
+            return _("Cet email est déjà utilisé. Connectez-vous ou choisissez un autre email.")
     return None
 
 
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
-    if User.query.first():
-        return redirect(url_for("login"))
+    with unscoped():
+        if User.query.first():
+            return redirect(url_for("login"))
     if request.method == "POST":
         f = request.form
-        email, pw = f.get("email", "").strip().lower(), f.get("password", "")
-        if not _EMAIL_RE.match(email) or len(pw) < 8 or not f.get("name", "").strip():
-            flash("Nom, email valide et mot de passe (8 caractères min.) requis.", "error")
+        err = _signup_form_errors(f)
+        if err:
+            flash(err, "error")
         else:
-            u = User(name=f["name"].strip()[:120], email=email, role="admin")
-            u.set_password(pw)
-            db.session.add(u)
-            if f.get("centre_name", "").strip():
-                Setting.set("centre_name", f["centre_name"].strip()[:120])
+            # Online: the very first account is the platform owner. Local: 30-day trial until a key is entered.
+            sc, u = create_school(f["centre_name"].strip(), f["name"].strip(), f["email"].strip().lower(),
+                                  f["password"], plan="trial" if LOCAL else "lifetime", super_=not LOCAL)
             db.session.commit()
             login_user(u, remember=True)
-            flash("Bienvenue ! Complétez les informations du centre.", "success")
+            flash(_("Bienvenue ! Complétez les informations du centre."), "success")
             return redirect(url_for("settings"))
     return render_template("setup.html")
+
+
+@app.route("/creer-mon-ecole", methods=["GET", "POST"])
+@rate_limit("signup", 6)
+def signup():
+    if LOCAL:
+        return redirect(url_for("login"))
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        f = request.form
+        err = None if not f.get("website") else "bot"
+        err = err or _signup_form_errors(f)
+        if err:
+            if err != "bot":
+                flash(err, "error")
+            return render_template("signup.html", form=f, plans=PLANS)
+        sc, u = create_school(f["centre_name"].strip(), f["name"].strip(), f["email"].strip().lower(), f["password"],
+                              phone=re.sub(r"[^\d+ ]", "", f.get("phone", "")), city=f.get("city", "").strip())
+        db.session.commit()
+        login_user(u, remember=True)
+        flash(_("Votre école est créée : 30 jours d'essai gratuit, toutes les fonctions incluses."), "success")
+        return redirect(url_for("settings"))
+    return render_template("signup.html", form={}, plans=PLANS)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -275,17 +446,22 @@ def login():
     ip = request.remote_addr or "?"
     if request.method == "POST":
         if _login_blocked(ip):
-            flash("Trop de tentatives. Réessayez dans 15 minutes.", "error")
+            flash(_("Trop de tentatives. Réessayez dans 15 minutes."), "error")
             return render_template("login.html"), 429
-        u = User.query.filter_by(email=request.form.get("email", "").strip().lower()).first()
+        with unscoped():
+            u = User.query.filter_by(email=request.form.get("email", "").strip().lower()).first()
+            sc = db.session.get(School, u.school_id) if u and u.school_id else None
         if u and u.active and u.check_password(request.form.get("password", "")):
+            if sc and not sc.active and not u.is_super:
+                flash(_("Le compte de cette école est suspendu. Contactez-nous sur WhatsApp."), "error")
+                return render_template("login.html")
             _LOGIN_FAILS.pop(ip, None)
             login_user(u, remember=bool(request.form.get("remember")))
             nxt = request.args.get("next") or ""
             return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("dashboard"))
         n, t0 = _LOGIN_FAILS.get(ip, (0, datetime.utcnow().timestamp()))
         _LOGIN_FAILS[ip] = (n + 1, t0)
-        flash("Identifiants incorrects.", "error")
+        flash(_("Identifiants incorrects."), "error")
     return render_template("login.html")
 
 
@@ -457,12 +633,12 @@ def enrollment_stats(enr):
 def cert_eligible(enr, row=None):
     """(ok, reason) — attendance threshold reached, and fully paid when the formation requires it."""
     if enr.status != "confirmed":
-        return False, "Inscription non confirmée"
+        return False, _("Inscription non confirmée")
     row = row or enrollment_stats(enr)
     if not row["eligible_att"]:
-        return False, f"Assiduité insuffisante ({row['rate']} % < {enr.formation.min_attendance} %)"
+        return False, _("Assiduité insuffisante ({rate} % < {min} %)", rate=row["rate"], min=enr.formation.min_attendance)
     if enr.formation.cert_requires_payment and enrollment_money(enr)["remaining"] > 0:
-        return False, "Reste à payer"
+        return False, _("Reste à payer")
     return True, ""
 
 
@@ -536,7 +712,7 @@ def do_checkin(s, enr, direction, method):
 
 
 def scan_msg(key, t=""):
-    return SCAN_MSG.get(key, key).format(t=t)
+    return _(SCAN_MSG.get(key, key), t=t)
 
 
 def find_by_contact(fo, raw):
@@ -596,7 +772,7 @@ def dashboard():
         b = add_months(a, 1)
         v = db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
             Payment.status == "paid", Payment.paid_on >= a, Payment.paid_on < b).scalar()
-        months.append({"label": ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"][a.month - 1],
+        months.append({"label": mshort(a.month),
                        "value": int(v or 0)})
     mmax = max([m["value"] for m in months] + [1])
     running = []
@@ -665,14 +841,14 @@ def formations():
     if request.method == "POST":
         title = request.form.get("title", "").strip()
         if not title:
-            flash("Le titre est obligatoire.", "error")
+            flash(_("Le titre est obligatoire."), "error")
             return redirect(url_for("formations"))
         fo = Formation(title=title[:160], slug=slugify(title))
         apply_formation_form(fo, request.form)
         db.session.add(fo)
         log("formation_created", fo.title)
         db.session.commit()
-        flash("Formation créée. Ajoutez maintenant les séances.", "success")
+        flash(_("Formation créée. Ajoutez maintenant les séances."), "success")
         return redirect(url_for("formation_detail", fid=fo.id))
     items = Formation.query.order_by(Formation.created_at.desc()).all()
     counts = {fo.id: {k: fo.enrollments.filter_by(status=k).count() for k in ("confirmed", "pending", "waitlist")}
@@ -703,20 +879,20 @@ def formation_action(fid):
     if action == "edit":
         apply_formation_form(fo, f)
         db.session.commit()
-        flash("Formation enregistrée.", "success")
+        flash(_("Formation enregistrée."), "success")
         tab = "infos"
     elif action == "status" and f.get("status") in FORMATION_STATUSES:
         fo.status = f["status"]
         log("formation_status", f"{fo.title} → {fo.status}")
         db.session.commit()
-        flash("Statut mis à jour.", "success")
+        flash(_("Statut mis à jour."), "success")
     elif action in ("add_seance", "gen_seances"):
         tab = "seances"
         d = parse_date(f.get("day"))
         a, b = hm_to_min(f.get("start_time")), hm_to_min(f.get("end_time"))
         label = f"{f['start_time'].strip()} - {f['end_time'].strip()}" if a is not None and b is not None and b > a else None
         if not d:
-            flash("Date invalide.", "error")
+            flash(_("Date invalide."), "error")
         elif action == "add_seance":
             db.session.add(Seance(formation_id=fo.id, day=d, time_label=label,
                                   topic=f.get("topic", "").strip()[:200] or None,
@@ -737,7 +913,7 @@ def formation_action(fid):
                     db.session.add(Seance(formation_id=fo.id, day=d + timedelta(days=every * i), time_label=label))
                 created = n
             db.session.commit()
-            flash(f"{created} séances créées.", "success")
+            flash(_("{n} séances créées.", n=created), "success")
     elif action == "del_seance":
         tab = "seances"
         s = Seance.query.filter_by(id=f.get("seance_id", type=int), formation_id=fo.id).first()
@@ -749,12 +925,12 @@ def formation_action(fid):
         st = db.session.get(Student, sid) if sid else None
         if not st:
             if not f.get("last_name", "").strip() or not f.get("first_name", "").strip():
-                flash("Nom et prénom requis.", "error")
+                flash(_("Nom et prénom requis."), "error")
                 return redirect(url_for("formation_detail", fid=fo.id))
             st = find_or_create_student(f)
             db.session.flush()
         if fo.enrollments.filter_by(student_id=st.id).first():
-            flash("Ce stagiaire est déjà inscrit.", "error")
+            flash(_("Ce stagiaire est déjà inscrit."), "error")
         else:
             enr = Enrollment(formation_id=fo.id, student_id=st.id, source="secretariat",
                              discount=to_int(f.get("discount"), 0, 10_000_000))
@@ -763,7 +939,7 @@ def formation_action(fid):
             confirm_enrollment(enr)
             log("enrollment_added", f"{st.full_name} → {fo.title}")
             db.session.commit()
-            flash(f"{st.full_name} inscrit(e).", "success")
+            flash(_("{name} inscrit(e).", name=st.full_name), "success")
     elif action in ("enr_confirm", "enr_cancel", "enr_delete", "enr_discount"):
         enr = Enrollment.query.filter_by(id=f.get("enrollment_id", type=int), formation_id=fo.id).first_or_404()
         if action == "enr_confirm":
@@ -782,10 +958,10 @@ def formation_action(fid):
             enr.discount = to_int(f.get("discount"), 0, 10_000_000)
             db.session.commit()
             if enr.payments.filter(Payment.status != "due").count():
-                flash("Remise enregistrée. Des paiements existent déjà : échéancier non recalculé.", "error")
+                flash(_("Remise enregistrée. Des paiements existent déjà : échéancier non recalculé."), "error")
             else:
                 ensure_schedule(enr, force=True)
-                flash("Remise appliquée, échéancier recalculé.", "success")
+                flash(_("Remise appliquée, échéancier recalculé."), "success")
             return redirect(url_for("payments_view", fid=fo.id) + f"#e{enr.id}")
         log(action, f"{enr.student.full_name} / {fo.title}")
         db.session.commit()
@@ -810,7 +986,7 @@ def seance_view(sid):
         if request.form.get("form_action") == "gen_codes":
             gen_codes(s)
             db.session.commit()
-            flash("Nouveaux codes générés.", "success")
+            flash(_("Nouveaux codes générés."), "success")
             return redirect(url_for("seance_view", sid=s.id))
         if request.form.get("form_action") == "all_present":
             for e in enrs:
@@ -831,7 +1007,7 @@ def seance_view(sid):
                     att.method = "manual"
         log("attendance_saved", f"{fo.title} {s.day}")
         db.session.commit()
-        flash("Présences enregistrées.", "success")
+        flash(_("Présences enregistrées."), "success")
         return redirect(url_for("seance_view", sid=s.id))
     ensure_tokens(s)
     att = {a.enrollment_id: a for a in s.attendances}
@@ -966,7 +1142,7 @@ def payment_action(pid):
         db.session.commit()
         if request.form.get("notify"):
             mail_payment(p, "received")
-        flash(f"Paiement enregistré — reçu {p.receipt_no}.", "success")
+        flash(_("Paiement enregistré — reçu {no}.", no=p.receipt_no), "success")
         if request.form.get("print"):
             return redirect(url_for("receipt", pid=p.id))
     elif action == "undo":
@@ -983,7 +1159,7 @@ def payment_action(pid):
         db.session.commit()
     elif action == "remind":
         ok = mail_payment(p, "manual")
-        flash("Relance envoyée par email." if ok else "Aucun email envoyé (adresse ou configuration manquante).",
+        flash(_("Relance envoyée par email.") if ok else "Aucun email envoyé (adresse ou configuration manquante).",
               "success" if ok else "error")
     return redirect(request.referrer or url_for("payments_view", fid=enr.formation_id))
 
@@ -993,10 +1169,10 @@ def payment_action(pid):
 def regen_schedule(eid):
     enr = Enrollment.query.get_or_404(eid)
     if enr.payments.filter(Payment.status != "due").count():
-        flash("Impossible : des paiements sont déjà enregistrés.", "error")
+        flash(_("Impossible : des paiements sont déjà enregistrés."), "error")
     else:
         ensure_schedule(enr, force=True)
-        flash("Échéancier recalculé.", "success")
+        flash(_("Échéancier recalculé."), "success")
     return redirect(url_for("payments_view", fid=enr.formation_id) + f"#e{enr.id}")
 
 
@@ -1006,26 +1182,6 @@ def receipt(pid):
     p = Payment.query.filter_by(id=pid, status="paid").first_or_404()
     return render_template("receipt.html", p=p, enr=p.enrollment, st=p.enrollment.student, fo=p.enrollment.formation,
                            money=enrollment_money(p.enrollment))
-
-
-@app.route("/caisse")
-@role_required("manage")
-def cashbox():
-    d1 = parse_date(request.args.get("du")) or today().replace(day=1)
-    d2 = parse_date(request.args.get("au")) or today()
-    pays = (Payment.query.filter(Payment.status == "paid", Payment.paid_on >= d1, Payment.paid_on <= d2)
-            .order_by(Payment.paid_on.desc(), Payment.id.desc()).all())
-    by_method = {}
-    for p in pays:
-        by_method[p.method or "autre"] = by_method.get(p.method or "autre", 0) + p.amount
-    if request.args.get("export"):
-        rows = [["Date", "Reçu", "Stagiaire", "Formation", "Libellé", "Mode", "Montant (DA)", "Encaissé par"]]
-        for p in pays:
-            rows.append([p.paid_on.strftime("%d/%m/%Y"), p.receipt_no, p.enrollment.student.full_name,
-                         p.enrollment.formation.title, p.label or "", LABELS.get(p.method, p.method), p.amount,
-                         p.collected_by or ""])
-        return xlsx(rows, f"caisse_{d1}_{d2}.xlsx")
-    return render_template("cashbox.html", pays=pays, d1=d1, d2=d2, total=sum(p.amount for p in pays), by_method=by_method)
 
 
 def mail_payment(p, kind):
@@ -1064,8 +1220,8 @@ def reminder_stage(p, d):
     return "b3" if days > 0 else "d0" if days > -3 else "a3" if days > -10 else "a10"
 
 
-def run_payment_reminders():
-    with app.app_context():
+def _run_payment_reminders():
+    if True:
         now = local_now()
         if not 9 <= now.hour < 20:
             return 0
@@ -1086,9 +1242,9 @@ def run_payment_reminders():
         return sent
 
 
-def run_seance_reminders():
+def _run_seance_reminders():
     """J-1 email with time, place and personal space link."""
-    with app.app_context():
+    if True:
         if local_now().hour < 9:
             return 0
         tomorrow = today() + timedelta(days=1)
@@ -1115,6 +1271,29 @@ def run_seance_reminders():
         return sent
 
 
+def _each_school(fn):
+    """Run a background job once per school whose licence is valid."""
+    def job():
+        with app.app_context():
+            with unscoped():
+                ids = [sc.id for sc in School.query.filter_by(active=True).all() if not sc.expired(today())]
+            total = 0
+            for sid in ids:
+                with as_school(sid):
+                    try:
+                        total += fn() or 0
+                    except Exception as e:  # noqa: BLE001
+                        db.session.rollback()
+                        print("job", fn.__name__, sid, e)
+            return total
+    job.__name__ = fn.__name__[1:]
+    return job
+
+
+run_payment_reminders = _each_school(_run_payment_reminders)
+run_seance_reminders = _each_school(_run_seance_reminders)
+
+
 # ── Students ──────────────────────────────────────────────────────────────────────────────────────
 @app.route("/stagiaires", methods=["GET", "POST"])
 @role_required("manage")
@@ -1122,7 +1301,7 @@ def students():
     if request.method == "POST":
         f = request.form
         if not f.get("last_name", "").strip() or not f.get("first_name", "").strip():
-            flash("Nom et prénom requis.", "error")
+            flash(_("Nom et prénom requis."), "error")
             return redirect(url_for("students"))
         st = Student(first_name="", last_name="")
         db.session.add(st)
@@ -1147,7 +1326,7 @@ def student_detail(sid):
     if request.method == "POST":
         if request.form.get("action") == "delete":
             if st.enrollments.join(Payment).filter(Payment.status == "paid").count():
-                flash("Suppression impossible : ce stagiaire a des paiements enregistrés.", "error")
+                flash(_("Suppression impossible : ce stagiaire a des paiements enregistrés."), "error")
                 return redirect(url_for("student_detail", sid=st.id))
             log("student_deleted", st.full_name)
             db.session.delete(st)
@@ -1158,7 +1337,7 @@ def student_detail(sid):
         else:
             apply_student_form(st, request.form)
         db.session.commit()
-        flash("Fiche enregistrée.", "success")
+        flash(_("Fiche enregistrée."), "success")
         return redirect(url_for("student_detail", sid=st.id))
     data = []
     for e in st.enrollments:
@@ -1260,17 +1439,17 @@ def import_students():
     back = url_for("formation_detail", fid=fo.id) if fo else url_for("students")
     f = request.files.get("file")
     if not f or not f.filename.lower().endswith((".xlsx", ".xlsm")):
-        flash("Choisissez un fichier Excel (.xlsx).", "error")
+        flash(_("Choisissez un fichier Excel (.xlsx)."), "error")
         return redirect(back)
     try:
         rows = read_students_xlsx(f)
     except Exception:  # noqa: BLE001
-        flash("Fichier illisible. Utilisez le modèle fourni.", "error")
+        flash(_("Fichier illisible. Utilisez le modèle fourni."), "error")
         return redirect(back)
     report = {"created": 0, "updated": 0, "enrolled": 0, "already": 0, "errors": []}
     for n, d in enumerate(rows, start=2):
         if not d.get("last_name") or not d.get("first_name"):
-            report["errors"].append(f"ligne {n} : nom ou prénom manquant")
+            report["errors"].append(_("ligne {n} : nom ou prénom manquant", n=n))
             continue
         d = {k: v for k, v in d.items() if v}       # empty cells never erase an existing file
         before = Student.query.count()
@@ -1291,12 +1470,12 @@ def import_students():
             ensure_schedule(enr)
     log("import_excel", f"{len(rows)} lignes" + (f" → {fo.title}" if fo else ""))
     db.session.commit()
-    msg = f"Import terminé : {report['created']} nouveaux stagiaires, {report['updated']} déjà connus (fiches mises à jour)"
+    msg = _("Import terminé : {a} nouveaux stagiaires, {b} déjà connus (fiches mises à jour)", a=report["created"], b=report["updated"])
     if fo:
-        msg += f", {report['enrolled']} inscrits à la formation" + (f", {report['already']} déjà inscrits" if report["already"] else "")
+        msg += _(", {n} inscrits à la formation", n=report["enrolled"]) + (_(", {n} déjà inscrits", n=report["already"]) if report["already"] else "")
     flash(msg + ".", "success")
     if report["errors"]:
-        flash("Lignes ignorées — " + " ; ".join(report["errors"][:15]), "error")
+        flash(_("Lignes ignorées — ") + " ; ".join(report["errors"][:15]), "error")
     return redirect(back)
 
 
@@ -1320,7 +1499,7 @@ def certificate_admin(eid):
     enr = Enrollment.query.get_or_404(eid)
     ok, why = cert_eligible(enr)
     if not ok and not request.args.get("force"):
-        flash(f"Attestation non disponible : {why}.", "error")
+        flash(_("Attestation non disponible : {why}.", why=why), "error")
         return redirect(request.referrer or url_for("formation_detail", fid=enr.formation_id))
     if not ok:
         log("certificate_forced", f"{enr.student.full_name} ({why})")
@@ -1343,7 +1522,16 @@ def verify(token):
 
 # ── Public pages: catalogue, registration, student space, parent space ───────────────────────────
 @app.route("/f")
-def catalogue():
+def catalogue_default():
+    if current_user.is_authenticated or (LOCAL and g.get("school_id")):
+        return redirect(url_for("catalogue", sslug=g.school.slug)) if g.get("school") else abort(404)
+    abort(404)
+
+
+@app.route("/e/<sslug>")
+def catalogue(sslug):
+    if not g.get("school_id"):
+        abort(404)
     items = Formation.query.filter(Formation.status.in_(("open", "running"))).order_by(Formation.starts_on).all()
     return render_template("catalogue.html", items=items)
 
@@ -1363,7 +1551,7 @@ def public_form(slug):
         email = f.get("email", "").strip().lower()
         if not f.get("first_name", "").strip() or not f.get("last_name", "").strip() or len(phone) < 9 \
                 or (email and not _EMAIL_RE.match(email)) or not f.get("consent"):
-            flash("Merci de remplir les champs obligatoires (nom, prénom, téléphone valide, accord).", "error")
+            flash(_("Merci de remplir les champs obligatoires (nom, prénom, téléphone valide, accord)."), "error")
             return render_template("public_form.html", fo=fo, form=f, done=None)
         st = find_or_create_student(f)
         db.session.flush()
@@ -1511,11 +1699,12 @@ def search():
 def pay_wa_message(p):
     enr, st, fo = p.enrollment, p.enrollment.student, p.enrollment.formation
     d = (p.due_on - today()).days
-    when = (f"arrive à échéance le {p.due_on:%d/%m/%Y}" if d > 0 else "est à régler aujourd'hui" if d == 0
-            else f"était dû le {p.due_on:%d/%m/%Y}")
-    return (f"Bonjour, {Setting.get('centre_name')} vous rappelle que le paiement « {p.label} » de {fmt_da(p.amount)} "
-            f"pour la formation {fo.title} ({st.first_name} {st.last_name}) {when}. "
-            f"Détail : {base_url()}/t/{enr.token}\n{fo.payment_info or Setting.get('payment_info')}")
+    when = (_("arrive à échéance le {d}", d=p.due_on.strftime("%d/%m/%Y")) if d > 0 else _("est à régler aujourd'hui") if d == 0
+            else _("était dû le {d}", d=p.due_on.strftime("%d/%m/%Y")))
+    return _("Bonjour, {centre} vous rappelle que le paiement « {label} » de {amount} pour la formation {title} ({name}) {when}. Détail : {url}",
+             centre=Setting.get("centre_name"), label=plabel(p.label), amount=fmt_da(p.amount), title=fo.title,
+             name=f"{st.first_name} {st.last_name}", when=when, url=f"{base_url()}/t/{enr.token}") + \
+        "\n" + (fo.payment_info or Setting.get("payment_info"))
 
 
 @app.route("/impayes")
@@ -1558,7 +1747,7 @@ def absence_alerts(limit_formations=None):
     out = []
     q = Formation.query.filter(Formation.status.in_(("open", "running")))
     for fo in q.all():
-        held = [s for s in fo.seances.filter(Seance.day <= today()).order_by(Seance.day.desc()).limit(6)
+        held = [s for s in fo.seances.filter(Seance.day <= today()).order_by(None).order_by(Seance.day.desc()).limit(6)
                 if s.attendances.filter(Attendance.status.isnot(None)).count()]
         if not held:
             continue
@@ -1587,9 +1776,9 @@ def absence_wa(eid):
     e.last_absence_alert = today()
     log("absence_wa", st.full_name)
     db.session.commit()
-    msg = (f"Bonjour{(' ' + st.parent_name) if st.parent_name and st.parent_phone else ''}, {Setting.get('centre_name')} "
-           f"vous informe que {st.first_name} {st.last_name} a été absent(e) aux dernières séances de la formation "
-           f"« {e.formation.title} ». Merci de nous contacter. Suivi : {base_url()}/parent/{st.parent_token}")
+    msg = _("Bonjour{who}, {centre} vous informe que {name} a été absent(e) aux dernières séances de la formation « {title} ». Merci de nous contacter. Suivi : {url}",
+            who=(" " + st.parent_name) if st.parent_name and st.parent_phone else "", centre=Setting.get("centre_name"),
+            name=f"{st.first_name} {st.last_name}", title=e.formation.title, url=f"{base_url()}/parent/{st.parent_token}")
     return redirect(wa_link(phone, msg))
 
 
@@ -1621,7 +1810,7 @@ def formation_duplicate(fid):
         fo.ends_on = old[-1].day + shift
     log("formation_duplicated", f"{src.title} → {fo.title}")
     db.session.commit()
-    flash("Nouvelle session créée (brouillon). Vérifiez les dates puis ouvrez les inscriptions.", "success")
+    flash(_("Nouvelle session créée (brouillon). Vérifiez les dates puis ouvrez les inscriptions."), "success")
     return redirect(url_for("formation_detail", fid=fo.id, tab="infos"))
 
 
@@ -1631,15 +1820,15 @@ def formation_delete(fid):
     fo = Formation.query.get_or_404(fid)
     paid = Payment.query.join(Enrollment).filter(Enrollment.formation_id == fo.id, Payment.status == "paid").count()
     if paid:
-        flash(f"Suppression impossible : {paid} paiement(s) encaissé(s). Passez plutôt la formation en « Terminée ».", "error")
+        flash(_("Suppression impossible : {n} paiement(s) encaissé(s). Passez plutôt la formation en « Terminée ».", n=paid), "error")
         return redirect(url_for("formation_detail", fid=fo.id, tab="infos"))
     if request.form.get("confirm", "").strip().lower() != "supprimer":
-        flash("Tapez SUPPRIMER pour confirmer.", "error")
+        flash(_("Tapez SUPPRIMER pour confirmer."), "error")
         return redirect(url_for("formation_detail", fid=fo.id, tab="infos"))
     log("formation_deleted", fo.title)
     db.session.delete(fo)
     db.session.commit()
-    flash("Formation supprimée.", "success")
+    flash(_("Formation supprimée."), "success")
     return redirect(url_for("formations"))
 
 
@@ -1674,7 +1863,7 @@ def certificates_bulk(fid):
             e.cert_no = f"ATT-{e.cert_issued_on.year}-{e.id:05d}"
         items.append((e.student, fo, e, r, f"{base_url()}/verifier/{e.token}"))
     if not items:
-        flash("Aucun stagiaire ne remplit encore les conditions de l'attestation.", "error")
+        flash(_("Aucun stagiaire ne remplit encore les conditions de l'attestation."), "error")
         return redirect(url_for("formation_detail", fid=fo.id, tab="assiduite"))
     db.session.commit()
     log("certificates_bulk", f"{fo.title} ({len(items)})")
@@ -1691,7 +1880,7 @@ def backup_xlsx():
     from openpyxl.styles import Font, PatternFill
     wb = Workbook()
     wb.remove(wb.active)
-    for model in (Setting, User, Student, Formation, Seance, Enrollment, Attendance, Payment, AuditLog):
+    for model in (Setting, User, Student, Formation, Seance, Enrollment, Attendance, Payment, CashEntry, AuditLog):
         ws = wb.create_sheet(model.__tablename__[:30])
         cols = [c.name for c in model.__table__.columns if c.name not in ("password_hash",)]
         ws.append(cols)
@@ -1726,6 +1915,267 @@ def students_export():
     return xlsx(rows, f"stagiaires_{today()}.xlsx")
 
 
+# ── Finances: cash journal, expenses, teacher pay, profit ─────────────────────────────────────────
+BANK_METHODS = ("ccp", "virement", "cheque")
+
+
+def period_bounds(kind, y, n):
+    """(start, end_exclusive) for kind month (n=1..12) | quarter (n=1..4) | year."""
+    if kind == "year":
+        return date(y, 1, 1), date(y + 1, 1, 1)
+    if kind == "quarter":
+        a = date(y, 3 * (n - 1) + 1, 1)
+        return a, add_months(a, 3)
+    a = date(y, n, 1)
+    return a, add_months(a, 1)
+
+
+def read_period():
+    kind = request.args.get("p") if request.args.get("p") in ("month", "quarter", "year") else "month"
+    y = to_int(request.args.get("y") or today().year, 2000, 2100)
+    default_n = today().month if kind == "month" else (today().month - 1) // 3 + 1
+    n = to_int(request.args.get("n") or default_n, 1, 12 if kind == "month" else 4)
+    d1, d2 = period_bounds(kind, y, n)
+    if kind == "year":
+        prev, nxt = dict(p=kind, y=y - 1, n=1), dict(p=kind, y=y + 1, n=1)
+    else:
+        top = 12 if kind == "month" else 4
+        prev = dict(p=kind, y=y - 1, n=top) if n == 1 else dict(p=kind, y=y, n=n - 1)
+        nxt = dict(p=kind, y=y + 1, n=1) if n == top else dict(p=kind, y=y, n=n + 1)
+    return {"kind": kind, "y": y, "n": n, "d1": d1, "d2": d2, "prev": prev, "next": nxt}
+
+
+def period_label(per):
+    if per["kind"] == "year":
+        return str(per["y"])
+    if per["kind"] == "quarter":
+        return f"T{per['n']} {per['y']}"
+    return f"{_(MONTHS[per['n'] - 1])} {per['y']}"
+
+
+def mshort(m):
+    from flask import g
+    full = _(MONTHS[m - 1])
+    return full if getattr(g, "lang", "fr") == "ar" else full[:4]
+
+
+MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+          "novembre", "décembre"]
+
+
+def finance_totals(d1, d2):
+    """Income and expenses between d1 (incl.) and d2 (excl.)."""
+    fees = (db.session.query(Formation.id, Formation.title, func.coalesce(func.sum(Payment.amount), 0))
+            .join(Enrollment, Enrollment.formation_id == Formation.id).join(Payment, Payment.enrollment_id == Enrollment.id)
+            .filter(Payment.status == "paid", Payment.paid_on >= d1, Payment.paid_on < d2)
+            .group_by(Formation.id, Formation.title).all())
+    by_formation = sorted([{"id": f, "title": t, "amount": int(a)} for f, t, a in fees], key=lambda x: -x["amount"])
+    fees_total = sum(x["amount"] for x in by_formation)
+    rows = (db.session.query(CashEntry.kind, CashEntry.category, func.coalesce(func.sum(CashEntry.amount), 0))
+            .filter(CashEntry.on >= d1, CashEntry.on < d2).group_by(CashEntry.kind, CashEntry.category).all())
+    other_in = {c: int(a) for k, c, a in rows if k == "in"}
+    out = {c: int(a) for k, c, a in rows if k == "out"}
+    income = fees_total + sum(other_in.values())
+    expense = sum(out.values())
+    profit = income - expense
+    return {"fees": fees_total, "by_formation": by_formation, "other_in": other_in, "out": out,
+            "income": income, "expense": expense, "profit": profit,
+            "margin": round(profit * 100 / income) if income else 0}
+
+
+def balances():
+    """Current cash-in-hand and bank/CCP balances (opening balances from the settings)."""
+    def s(q):
+        return int(q.scalar() or 0)
+    res = {}
+    for name, methods in (("cash", ("cash", "autre")), ("bank", BANK_METHODS)):
+        fees = s(db.session.query(func.sum(Payment.amount)).filter(Payment.status == "paid", Payment.method.in_(methods)))
+        cin = s(db.session.query(func.sum(CashEntry.amount)).filter(CashEntry.kind == "in", CashEntry.method.in_(methods)))
+        cout = s(db.session.query(func.sum(CashEntry.amount)).filter(CashEntry.kind == "out", CashEntry.method.in_(methods)))
+        res[name] = to_int(Setting.get(f"{name}_opening"), -10 ** 9, 10 ** 10) + fees + cin - cout
+    res["total"] = res["cash"] + res["bank"]
+    return res
+
+
+@app.route("/finances")
+@role_required("admin")
+def finances():
+    per = read_period()
+    tot = finance_totals(per["d1"], per["d2"])
+    # previous equal period for comparison
+    pk = per["prev"]
+    p1, p2 = period_bounds(pk["p"], pk["y"], pk["n"])
+    prev = finance_totals(p1, p2)
+    # month by month over the year of the period
+    y = per["y"]
+    months = []
+    for m in range(1, 13):
+        a, b = period_bounds("month", y, m)
+        t = finance_totals(a, b)
+        months.append({"m": m, "label": mshort(m), "income": t["income"], "expense": t["expense"],
+                       "profit": t["profit"]})
+    quarters = []
+    for q in range(1, 5):
+        a, b = period_bounds("quarter", y, q)
+        t = finance_totals(a, b)
+        quarters.append({"q": q, "income": t["income"], "expense": t["expense"], "profit": t["profit"]})
+    ytot = finance_totals(*period_bounds("year", y, 1))
+    mmax = max([max(x["income"], x["expense"]) for x in months] + [1])
+    if request.args.get("export"):
+        rows = [[_("Mois"), _("Recettes"), _("Charges"), _("Bénéfice")]]
+        for x in months:
+            rows.append([_(MONTHS[x["m"] - 1]), x["income"], x["expense"], x["profit"]])
+        rows.append([str(y), ytot["income"], ytot["expense"], ytot["profit"]])
+        rows.append([])
+        rows.append([_("Catégorie"), _("Montant (DA)")])
+        for c, a in sorted(ytot["out"].items(), key=lambda i: -i[1]):
+            rows.append([L[c], a])
+        return xlsx(rows, f"finances_{y}.xlsx")
+    return render_template("finances.html", per=per, tot=tot, prev=prev, months=months, quarters=quarters,
+                           ytot=ytot, mmax=mmax, label=period_label(per), bal=balances())
+
+
+@app.route("/caisse", methods=["GET", "POST"])
+@role_required("manage")
+def cashbox():
+    if request.method == "POST":
+        f = request.form
+        if f.get("action") == "delete":
+            e = CashEntry.query.get_or_404(f.get("entry_id", type=int))
+            if not current_user.can("admin"):
+                abort(403)
+            log("cash_deleted", f"{e.category} {e.amount}")
+            db.session.delete(e)
+            db.session.commit()
+            flash(_("Mouvement supprimé."), "success")
+            return redirect(request.referrer or url_for("cashbox"))
+        kind = "in" if f.get("kind") == "in" else "out"
+        cat = f.get("category", "")
+        if cat not in (CASH_IN if kind == "in" else CASH_OUT):
+            cat = "autre_recette" if kind == "in" else "autre_charge"
+        amount = to_int(f.get("amount"), 0, 100_000_000)
+        if not amount:
+            flash(_("Montant invalide."), "error")
+            return redirect(request.referrer or url_for("cashbox"))
+        m = f.get("method", "cash")
+        e = CashEntry(kind=kind, category=cat, amount=amount, on=parse_date(f.get("on")) or today(),
+                      method=m if m in PAY_METHODS else "cash", label=f.get("label", "").strip()[:160] or None,
+                      ref=f.get("ref", "").strip()[:40] or None, created_by=current_user.name)
+        db.session.add(e)
+        log("cash_" + kind, f"{cat} {amount}")
+        db.session.commit()
+        flash(_("Mouvement enregistré."), "success")
+        return redirect(request.referrer or url_for("cashbox"))
+    d1 = parse_date(request.args.get("du")) or today().replace(day=1)
+    d2 = parse_date(request.args.get("au")) or today()
+    flt = request.args.get("f", "")
+    pays = (Payment.query.filter(Payment.status == "paid", Payment.paid_on >= d1, Payment.paid_on <= d2).all()
+            if flt in ("", "in", "fees") else [])
+    q = CashEntry.query.filter(CashEntry.on >= d1, CashEntry.on <= d2)
+    if flt == "in":
+        q = q.filter(CashEntry.kind == "in")
+    elif flt in ("out", "salaire"):
+        q = q.filter(CashEntry.kind == "out")
+        if flt == "salaire":
+            q = q.filter(CashEntry.category == "salaire")
+    entries = q.all() if flt != "fees" else []
+    lines = []
+    for p in pays:
+        e = p.enrollment
+        lines.append({"on": p.paid_on, "kind": "in", "cat": "fees", "label": f"{e.student.full_name} · {e.formation.title}",
+                      "sub": p.label, "method": p.method, "amount": p.amount, "ref": p.receipt_no, "by": p.collected_by,
+                      "pid": p.id, "eid": None})
+    for c in entries:
+        lab = c.label or ""
+        if c.category == "salaire" and c.teacher:
+            lab = f"{c.teacher.name}" + (f" · {c.period}" if c.period else "") + (f" · {lab}" if lab else "")
+        lines.append({"on": c.on, "kind": c.kind, "cat": c.category, "label": lab, "sub": "", "method": c.method,
+                      "amount": c.amount, "ref": c.ref, "by": c.created_by, "pid": None, "eid": c.id})
+    lines.sort(key=lambda x: (x["on"], x["kind"] == "out"), reverse=True)
+    tin = sum(x["amount"] for x in lines if x["kind"] == "in")
+    tout = sum(x["amount"] for x in lines if x["kind"] == "out")
+    by_method = {}
+    for x in lines:
+        sgn = 1 if x["kind"] == "in" else -1
+        by_method[x["method"] or "autre"] = by_method.get(x["method"] or "autre", 0) + sgn * x["amount"]
+    if request.args.get("export"):
+        rows = [[_("Date"), _("Sens"), _("Catégorie"), _("Libellé"), _("Mode"), _("Montant (DA)"), _("Référence"), _("Par")]]
+        for x in sorted(lines, key=lambda x: x["on"]):
+            rows.append([x["on"].strftime("%d/%m/%Y"), _("Entrée") if x["kind"] == "in" else _("Sortie"),
+                         L.get(x["cat"], x["cat"]), (x["label"] + (" · " + x["sub"] if x["sub"] else "")),
+                         L.get(x["method"], x["method"]), x["amount"] if x["kind"] == "in" else -x["amount"],
+                         x["ref"] or "", x["by"] or ""])
+        return xlsx(rows, f"caisse_{d1}_{d2}.xlsx")
+    return render_template("cashbox.html", lines=lines, d1=d1, d2=d2, tin=tin, tout=tout, by_method=by_method,
+                           flt=flt, bal=balances(), cash_in=CASH_IN, cash_out=CASH_OUT)
+
+
+def teacher_seances(u, d1, d2):
+    """Séances held by a teacher between d1 (incl.) and d2 (excl.), up to today."""
+    end = min(d2, today() + timedelta(days=1))
+    q = (Seance.query.join(Formation).filter(Seance.day >= d1, Seance.day < end)
+         .filter(or_(Seance.teacher_id == u.id, (Seance.teacher_id.is_(None)) & (Formation.trainer_id == u.id))))
+    return q.order_by(Seance.day).all()
+
+
+def teacher_due(u, seances):
+    hours = round(sum(s.duration_minutes() for s in seances) / 60, 2)
+    rate = u.pay_rate or 0
+    if u.pay_mode == "hour":
+        due = round(hours * rate)
+    elif u.pay_mode == "seance":
+        due = len(seances) * rate
+    elif u.pay_mode == "month":
+        due = rate if seances or rate else 0
+    else:
+        due = 0
+    return hours, due
+
+
+@app.route("/enseignants", methods=["GET", "POST"])
+@role_required("admin")
+def teachers():
+    y = to_int(request.args.get("y") or today().year, 2000, 2100)
+    m = to_int(request.args.get("m") or today().month, 1, 12)
+    d1, d2 = period_bounds("month", y, m)
+    period = f"{y}-{m:02d}"
+    if request.method == "POST":
+        f = request.form
+        u = User.query.get_or_404(f.get("user_id", type=int))
+        if f.get("action") == "rate":
+            u.pay_mode = f.get("pay_mode") if f.get("pay_mode") in ("hour", "seance", "month") else None
+            u.pay_rate = to_int(f.get("pay_rate"), 0, 10_000_000)
+            u.phone = f.get("phone", "").strip()[:30] or u.phone
+            db.session.commit()
+            flash(_("Tarif enregistré."), "success")
+        elif f.get("action") == "pay":
+            amount = to_int(f.get("amount"), 0, 100_000_000)
+            if amount:
+                mth = f.get("method", "cash")
+                db.session.add(CashEntry(kind="out", category="salaire", amount=amount, teacher_id=u.id, period=period,
+                                         on=parse_date(f.get("on")) or today(), method=mth if mth in PAY_METHODS else "cash",
+                                         hours=float(f.get("hours") or 0) or None, label=f.get("label", "").strip()[:160] or None,
+                                         created_by=current_user.name))
+                log("teacher_paid", f"{u.name} {period} {amount}")
+                db.session.commit()
+                flash(_("Paiement de l'enseignant enregistré."), "success")
+        return redirect(url_for("teachers", y=y, m=m))
+    rows = []
+    for u in User.query.filter_by(role="formateur").order_by(User.name).all():
+        ss = teacher_seances(u, d1, d2)
+        hours, due = teacher_due(u, ss)
+        paid = int(db.session.query(func.coalesce(func.sum(CashEntry.amount), 0)).filter(
+            CashEntry.category == "salaire", CashEntry.teacher_id == u.id, CashEntry.period == period).scalar())
+        rows.append({"u": u, "seances": ss, "n": len(ss), "hours": hours, "due": due, "paid": paid,
+                     "rest": max(0, due - paid),
+                     "history": CashEntry.query.filter_by(category="salaire", teacher_id=u.id)
+                     .order_by(CashEntry.on.desc()).limit(6).all()})
+    prev = (y - 1, 12) if m == 1 else (y, m - 1)
+    nxt = (y + 1, 1) if m == 12 else (y, m + 1)
+    return render_template("teachers.html", rows=rows, y=y, m=m, label=f"{_(MONTHS[m - 1])} {y}", prev=prev, nxt=nxt,
+                           tot={k: sum(r[k] for r in rows) for k in ("due", "paid", "rest")})
+
+
 # ── Settings & users ──────────────────────────────────────────────────────────────────────────────
 @app.route("/parametres", methods=["GET", "POST"])
 @role_required("admin")
@@ -1743,12 +2193,12 @@ def settings():
             kind = {b"\x89PNG": "png", b"\xff\xd8\xff": "jpeg"}
             mime = next((m for sig, m in kind.items() if data.startswith(sig)), None)
             if not mime or len(data) > 600_000:
-                flash("Logo : image PNG ou JPG de moins de 600 Ko.", "error")
+                flash(_("Logo : image PNG ou JPG de moins de 600 Ko."), "error")
             else:
                 Setting.set("logo", f"data:image/{mime};base64," + base64.b64encode(data).decode())
         log("settings_saved")
         db.session.commit()
-        flash("Paramètres enregistrés.", "success")
+        flash(_("Paramètres enregistrés."), "success")
         return redirect(url_for("settings"))
     return render_template("settings.html", s=Setting.all(),
                            email_ok=bool(os.environ.get("BREVO_API_KEY") or os.environ.get("SMTP_HOST")))
@@ -1767,17 +2217,19 @@ def users():
             u = User.query.get_or_404(f.get("user_id", type=int))
             pw = secrets.token_urlsafe(8)
             u.set_password(pw)
-            flash(f"Nouveau mot de passe de {u.name} : {pw}", "success")
+            flash(_("Nouveau mot de passe de {name} : {pw}", name=u.name, pw=pw), "success")
         else:
             email = f.get("email", "").strip().lower()
-            if not _EMAIL_RE.match(email) or User.query.filter_by(email=email).first() or not f.get("name", "").strip():
-                flash("Nom et email (unique) requis.", "error")
+            with unscoped():
+                taken = User.query.filter_by(email=email).first()
+            if not _EMAIL_RE.match(email) or taken or not f.get("name", "").strip():
+                flash(_("Nom et email (unique) requis."), "error")
                 return redirect(url_for("users"))
             pw = f.get("password") or secrets.token_urlsafe(8)
             u = User(name=f["name"].strip()[:120], email=email, role=f.get("role") if f.get("role") in ROLES else "secretaire")
             u.set_password(pw)
             db.session.add(u)
-            flash(f"Compte créé. Mot de passe : {pw}", "success")
+            flash(_("Compte créé. Mot de passe : {pw}", pw=pw), "success")
         log("users_changed")
         db.session.commit()
         return redirect(url_for("users"))
@@ -1790,15 +2242,133 @@ def users():
 def account():
     if request.method == "POST":
         if not current_user.check_password(request.form.get("old", "")):
-            flash("Mot de passe actuel incorrect.", "error")
+            flash(_("Mot de passe actuel incorrect."), "error")
         elif len(request.form.get("new", "")) < 8:
-            flash("8 caractères minimum.", "error")
+            flash(_("8 caractères minimum."), "error")
         else:
             current_user.set_password(request.form["new"])
             db.session.commit()
-            flash("Mot de passe modifié.", "success")
+            flash(_("Mot de passe modifié."), "success")
         return redirect(url_for("account"))
     return render_template("account.html")
+
+
+# ── Licence, transfer of data, platform (super-admin) ─────────────────────────────────────────────
+PLAN_NAMES = {"trial": "Essai gratuit", "pass": "Pass+ (1 an)", "ultimate": "Ultimate (2 ans)", "lifetime": "À vie"}
+KEY_MSG = {"empty": "Saisissez une clé.", "invalid": "Clé invalide. Vérifiez-la ou contactez-nous.",
+           "used": "Cette clé a déjà été utilisée par une autre école.", "already": "Cette clé est déjà activée sur votre école.",
+           "other_school": "Cette clé a été émise pour un autre établissement (nom différent)."}
+
+
+@app.route("/abonnement", methods=["GET", "POST"])
+@role_required("admin")
+def licence():
+    sc = g.school
+    if request.method == "POST":
+        ok, res = tenancy.activate_key(sc, request.form.get("key"), today())
+        if ok:
+            log("licence_activated", res)
+            db.session.commit()
+            flash(_("Licence activée : {plan}.", plan=_(PLAN_NAMES[res])), "success")
+        else:
+            db.session.rollback()
+            flash(_(KEY_MSG[res]), "error")
+        return redirect(url_for("licence"))
+    return render_template("licence.html", sc=sc, plans=PLANS, names=PLAN_NAMES,
+                           sales_wa=lambda plan: wa_link(SALES_PHONE, _(
+                               "Bonjour, je souhaite l'offre {plan} de HaithemEduAI pour « {name} ».",
+                               plan=_(PLAN_NAMES[plan]), name=sc.name)))
+
+
+@app.route("/donnees/export.hedu")
+@role_required("admin")
+def data_export():
+    blob = tenancy.export_school()
+    log("data_exported")
+    db.session.commit()
+    return send_file(io.BytesIO(blob), mimetype="application/octet-stream",
+                     download_name=f"{g.school.slug}_{today()}.hedu")
+
+
+@app.route("/donnees/import", methods=["POST"])
+@role_required("admin")
+def data_import():
+    f = request.files.get("file")
+    if request.form.get("confirm", "").strip().upper() not in ("REMPLACER", "استبدال", "REPLACE") or not f:
+        flash(_("Choisissez le fichier et tapez REMPLACER pour confirmer."), "error")
+        return redirect(url_for("licence"))
+    try:
+        counts = tenancy.import_school(f.read(), g.school)
+        db.session.commit()
+    except Exception as e:  # noqa: BLE001
+        db.session.rollback()
+        print("import error", e)
+        flash(_("Fichier invalide : utilisez un fichier .hedu exporté depuis HaithemEduAI."), "error")
+        return redirect(url_for("licence"))
+    flash(_("Données importées : {n} élèves, {f} formations, {p} paiements.", n=counts.get("student", 0),
+            f=counts.get("formation", 0), p=counts.get("payment", 0)), "success")
+    return redirect(url_for("dashboard"))
+
+
+def super_required(fn):
+    @wraps(fn)
+    @login_required
+    def inner(*a, **kw):
+        if LOCAL or not current_user.is_super:
+            abort(403)
+        with unscoped():
+            return fn(*a, **kw)
+    return inner
+
+
+@app.route("/plateforme", methods=["GET", "POST"])
+@super_required
+def platform():
+    new_key = None
+    if request.method == "POST":
+        f = request.form
+        act = f.get("action")
+        sc = db.session.get(School, f.get("school_id", type=int)) if f.get("school_id") else None
+        if act == "plan" and sc and f.get("plan") in PLANS:
+            tenancy.apply_plan(sc, f["plan"], today())
+            flash(f"{sc.name} : {PLAN_NAMES[f['plan']]} appliqué.", "success")
+        elif act == "expiry" and sc:
+            sc.expires_on = parse_date(f.get("expires_on"))
+            flash(f"{sc.name} : date d'expiration modifiée.", "success")
+        elif act == "toggle" and sc:
+            sc.active = not sc.active
+            flash(f"{sc.name} : {'réactivée' if sc.active else 'suspendue'}.", "success")
+        elif act == "notes" and sc:
+            sc.notes = f.get("notes", "")[:2000]
+        elif act == "key" and f.get("plan") in PLANS:
+            plan, bound = f["plan"], f.get("bound_name", "").strip()
+            if f.get("kind") == "signed" or plan == "lifetime":
+                if not tenancy.can_sign():
+                    flash("LICENSE_PRIVATE_KEY absente : impossible de signer une clé hors ligne.", "error")
+                    return redirect(url_for("platform"))
+                code = tenancy.make_signed_key(plan, bound)
+            else:
+                code, bound = tenancy.make_short_key(), ""
+            db.session.add(LicenseKey(digest=tenancy.digest(code), code=code, plan=plan, bound_name=bound or None,
+                                      note=f.get("note", "")[:200]))
+            new_key = code
+        db.session.commit()
+        if not new_key:
+            return redirect(url_for("platform"))
+    schools = School.query.order_by(School.created_at.desc()).all()
+    stats = {}
+    for sc in schools:
+        stats[sc.id] = {"students": Student.query.filter_by(school_id=sc.id).count(),
+                        "users": User.query.filter_by(school_id=sc.id).count(),
+                        "admin": User.query.filter_by(school_id=sc.id, role="admin").order_by(User.id).first()}
+    keys = LicenseKey.query.order_by(LicenseKey.id.desc()).limit(60).all()
+    names = {sc.id: sc.name for sc in schools}
+    paid = [sc for sc in schools if sc.plan != "trial"]
+    summary = {"schools": len(schools), "trial": sum(1 for sc in schools if sc.plan == "trial" and not sc.expired(today())),
+               "paid": len(paid), "expired": sum(1 for sc in schools if sc.expired(today())),
+               "soon": sum(1 for sc in schools if sc.days_left(today()) is not None and 0 <= sc.days_left(today()) <= 15)}
+    return render_template("platform.html", schools=schools, stats=stats, keys=keys, names=names, summary=summary,
+                           plans=PLANS, pnames=PLAN_NAMES, new_key=new_key, can_sign=tenancy.can_sign())
 
 
 @app.route("/health")
@@ -1831,4 +2401,14 @@ if os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("ENABLE_SCHEDULER"):
     start_scheduler()
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    if LOCAL:      # accessible from the phones / PCs on the school's Wi-Fi
+        import socket
+        try:
+            _s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            _s.connect(("8.8.8.8", 80))
+            print(f"📶 Sur le réseau de l'école : http://{_s.getsockname()[0]}:5000")
+        except OSError:
+            pass
+        app.run(host="0.0.0.0", port=5000, debug=False)
+    else:
+        app.run(debug=True, port=5000)

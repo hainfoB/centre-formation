@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% block title %}Plateforme{% endblock %}{% block content %}
+<div class="head"><h1><i class="bi bi-buildings"></i> Plateforme — écoles & licences</h1></div>
+<div class="grid g4" style="margin-bottom:16px">
+<div class="kpi"><span>Écoles</span><b>{{ summary.schools }}</b></div>
+<div class="kpi o"><span>En essai</span><b>{{ summary.trial }}</b></div>
+<div class="kpi"><span>Clientes payantes</span><b>{{ summary.paid }}</b></div>
+<div class="kpi o"><span>Expirent ≤ 15 j</span><b>{{ summary.soon }}</b></div>
+<div class="kpi"><span>Expirées</span><b>{{ summary.expired }}</b></div></div>
+
+{% if new_key %}<div class="card newkey"><h2><i class="bi bi-key-fill"></i> Nouvelle clé</h2>
+<div class="row" style="gap:8px"><input id="nk" value="{{ new_key }}" readonly dir="ltr" style="font-family:monospace;flex:1"><button type="button" class="btn o" data-copy="nk"><i class="bi bi-clipboard"></i></button></div>
+<p class="xs muted">Envoyez-la à l'école : Abonnement & données → Activer une clé. Utilisable une seule fois.</p></div>{% endif %}
+
+<div class="card"><h2>Générer une clé</h2>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="key">
+<div class="fields">
+<div><label>Offre</label><select name="plan">{% for c, (d, p) in plans.items() %}{% if c != 'trial' %}<option value="{{ c }}">{{ pnames[c] }} — {{ p|da }}</option>{% endif %}{% endfor %}<option value="trial">Prolongation essai (+30 j)</option></select></div>
+<div><label>Type</label><select name="kind"><option value="short">En ligne — courte (HEDU-…)</option><option value="signed">Hors ligne — signée (HEDUL-…)</option></select></div>
+<div><label>Nom exact de l'école (clé signée)</label><input name="bound_name" placeholder="vide = toute école"></div>
+<div><label>Note (client, paiement…)</label><input name="note"></div></div>
+<p class="xs muted">L'offre « À vie » produit toujours une clé signée : elle fonctionne en ligne et sur une installation locale sans Internet.{% if not can_sign %} <b style="color:#dc2626">LICENSE_PRIVATE_KEY non configurée.</b>{% endif %}</p>
+<button class="btn o">Générer</button></form></div>
+
+<div class="card"><h2>Écoles</h2><input data-filter="sch" placeholder="Filtrer…" style="max-width:260px;margin-bottom:10px">
+<div class="tw"><table id="sch"><tr><th>École</th><th>Responsable</th><th>Offre</th><th>Expiration</th><th>Élèves</th><th>Actions</th></tr>
+{% for sc in schools %}{% set st = stats[sc.id] %}{% set left = sc.days_left(today) %}
+<tr data-row><td><b>{{ sc.name }}</b>{% if not sc.active %} <span class="badge b-cancelled">suspendue</span>{% endif %}<div class="xs muted">{{ sc.city or '' }} · créée le {{ sc.created_at.strftime('%d/%m/%Y') }}</div></td>
+<td class="small">{% if st.admin %}{{ st.admin.name }}<div class="xs muted">{{ st.admin.email }}</div>{% endif %}{% if sc.phone %}<a class="xs" href="{{ wa(sc.phone, 'Bonjour ' ~ sc.name ~ ', ') }}" target="_blank"><i class="bi bi-whatsapp"></i> {{ sc.phone|ltr }}</a>{% endif %}</td>
+<td><span class="badge {{ 'b-open' if sc.plan!='trial' else 'b-pending' }}">{{ pnames[sc.plan] }}</span></td>
+<td class="small nowrap">{% if sc.expires_on is none %}∞{% else %}<span style="color:{{ '#dc2626' if left < 0 else ('#ea580c' if left <= 15 else 'inherit') }}">{{ sc.expires_on|d }}</span><div class="xs muted">{{ left }} j</div>{% endif %}</td>
+<td>{{ st.students }}<div class="xs muted">{{ st.users }} compte(s)</div></td>
+<td><form method="post" class="row" style="gap:4px;flex-wrap:wrap"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="school_id" value="{{ sc.id }}">
+<select name="plan" class="sm">{% for c in plans %}<option value="{{ c }}">{{ pnames[c] }}</option>{% endfor %}</select><button class="btn sm" name="action" value="plan">Appliquer</button>
+<input type="date" name="expires_on" value="{{ sc.expires_on or '' }}" class="sm"><button class="btn sm ghost" name="action" value="expiry">Date</button>
+<button class="btn sm {{ 'red' if sc.active else 'green' }}" name="action" value="toggle" onclick="return confirm('Confirmer ?')">{{ 'Suspendre' if sc.active else 'Réactiver' }}</button></form></td></tr>
+{% endfor %}</table></div></div>
+
+<div class="card"><h2>Clés émises</h2><div class="tw"><table><tr><th>Créée</th><th>Offre</th><th>Clé</th><th>Note</th><th>Utilisée par</th></tr>
+{% for k in keys %}<tr><td class="xs nowrap">{{ k.created_at.strftime('%d/%m/%Y') }}</td><td class="small">{{ pnames[k.plan] }}</td>
+<td class="xs" dir="ltr" style="font-family:monospace;max-width:280px;word-break:break-all">{{ k.code }}</td><td class="xs muted">{{ k.note or '' }}{% if k.bound_name %}<div>→ {{ k.bound_name }}</div>{% endif %}</td>
+<td class="small">{% if k.used_school_id %}{{ names.get(k.used_school_id, '#' ~ k.used_school_id) }}<div class="xs muted">{{ k.used_at.strftime('%d/%m/%Y') }}</div>{% else %}<span class="badge b-pending">libre</span>{% endif %}</td></tr>{% endfor %}</table></div></div>
+{% endblock %}

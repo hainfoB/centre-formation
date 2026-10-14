@@ -48,7 +48,7 @@ app.config["WTF_CSRF_TIME_LIMIT"] = None
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 APP_URL = os.environ.get("APP_URL", "").rstrip("/")
 LOCAL = os.environ.get("APP_MODE") == "local"            # installation sur le PC de l'école (offre à vie)
-SALES_PHONE = os.environ.get("SALES_PHONE", "0796302802")  # WhatsApp du vendeur (renouvellements)
+SALES_PHONE = os.environ.get("SALES_PHONE", "+213699102523")  # WhatsApp du vendeur (renouvellements)
 UTC_OFFSET = int(os.environ.get("UTC_OFFSET_HOURS", "1"))   # Algérie = UTC+1
 
 db.init_app(app)

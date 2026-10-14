@@ -113,7 +113,7 @@ def run():
         from flask import g
         from models import School
         import tenancy
-        sc = School(name="Académie Al-Nour", slug="academie-al-nour", city="Bordj Bou Arréridj", phone="0796302802")
+        sc = School(name="Académie Al-Nour", slug="academie-al-nour", city="Bordj Bou Arréridj", phone="+213699102523")
         tenancy.apply_plan(sc, "lifetime" if "--essai" not in sys.argv else "trial", today())
         db.session.add(sc)
         db.session.flush()

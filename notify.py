@@ -82,5 +82,5 @@ def wa_link(phone, text):
     if d.startswith("0"):
         d = "213" + d[1:]
     if not d:
-        return ""
+        return f"https://wa.me/?text={urllib.parse.quote(text)}" if phone == "" else ""
     return f"https://wa.me/{d}?text={urllib.parse.quote(text)}"

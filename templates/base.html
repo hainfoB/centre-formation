@@ -14,16 +14,16 @@
 <div class="scrim" onclick="document.body.classList.remove('nav-open')"></div>
 <div class="layout">
 <nav class="side" aria-label="{{ _('Navigation principale') }}">
-  <div class="brand">{{ brandmark() }}<div><div class="bname">{{ centre.centre_name }}</div><small>{{ current_user.name }} · {{ L[current_user.role] }}</small></div></div>
+  <div class="brand">{{ brandmark() }}<div><div class="bname">{{ centre.centre_name }}</div><small>{{ current_user.name }} · {{ 'Plateforme' if current_user.is_super and not school else L[current_user.role] }}</small></div></div>
   {% set ep = request.endpoint %}
-  {% if current_user.can('manage') %}
+  {% if current_user.can('manage') and school %}
   <form action="{{ url_for('search') }}" class="sidesearch" role="search"><i class="bi bi-search"></i><input name="q" placeholder="{{ _('Rechercher… (/)') }}" value="{{ request.args.get('q','') if ep=='search' }}" aria-label="{{ _('Rechercher un stagiaire, une formation, un reçu') }}" id="gsearch"></form>
   <a href="{{ url_for('dashboard') }}" class="{{ 'on' if ep=='dashboard' }}"><i class="bi bi-speedometer2"></i> {{ _("Tableau de bord") }}{% if nav.pending %}<span class="pill">{{ nav.pending }}</span>{% endif %}</a>
   <a href="{{ url_for('formations') }}" class="{{ 'on' if ep in ('formations','formation_detail','payments_view') }}"><i class="bi bi-journal-bookmark"></i> {{ _("Formations") }}</a>
   <a href="{{ url_for('students') }}" class="{{ 'on' if ep in ('students','student_detail') }}"><i class="bi bi-people"></i> {{ _("Stagiaires") }}</a>
   {% endif %}
-  <a href="{{ url_for('my_seances') }}" class="{{ 'on' if ep in ('my_seances','seance_view') }}"><i class="bi bi-calendar-check"></i> {{ _("Séances & présences") }}</a>
-  {% if current_user.can('manage') %}
+  {% if school %}<a href="{{ url_for('my_seances') }}" class="{{ 'on' if ep in ('my_seances','seance_view') }}"><i class="bi bi-calendar-check"></i> {{ _("Séances & présences") }}</a>{% endif %}
+  {% if current_user.can('manage') and school %}
   <div class="navsec">{{ _("Finances") }}</div>
   <a href="{{ url_for('unpaid') }}" class="{{ 'on' if ep=='unpaid' }}"><i class="bi bi-bell"></i> {{ _("Impayés & relances") }}{% if nav.overdue %}<span class="pill red">{{ nav.overdue }}</span>{% endif %}</a>
   <a href="{{ url_for('cashbox') }}" class="{{ 'on' if ep=='cashbox' }}"><i class="bi bi-cash-coin"></i> {{ _("Caisse") }}</a>
@@ -32,12 +32,14 @@
   <div class="navsec">{{ _("Centre") }}</div>
   <a href="{{ url_for('catalogue', sslug=school.slug) if school else '#' }}" target="_blank" rel="noopener"><i class="bi bi-globe2"></i> {{ _("Catalogue public") }} <i class="bi bi-box-arrow-up-right xs"></i></a>
   {% endif %}
-  {% if current_user.can('admin') %}
+  {% if current_user.can('admin') and school %}
   <a href="{{ url_for('users') }}" class="{{ 'on' if ep=='users' }}"><i class="bi bi-person-gear"></i> {{ _("Utilisateurs") }}</a>
   <a href="{{ url_for('settings') }}" class="{{ 'on' if ep=='settings' }}"><i class="bi bi-gear"></i> {{ _("Paramètres") }}</a>
   <a href="{{ url_for('licence') }}" class="{{ 'on' if ep=='licence' }}"><i class="bi bi-patch-check"></i> {{ _("Abonnement & données") }}{% if lic and lic.warn %}<span class="pill {{ 'red' if lic.expired or (lic.left is not none and lic.left <= 7) }}">{{ lic.left if lic.left is not none and lic.left >= 0 else '!' }}</span>{% endif %}</a>
   {% endif %}
-  {% if current_user.is_super and not LOCAL %}<a href="{{ url_for('platform') }}" class="{{ 'on' if ep=='platform' }}"><i class="bi bi-buildings"></i> {{ _("Plateforme") }}</a>{% endif %}
+  {% if current_user.is_super and not LOCAL %}<div class="navsec">{{ _("Plateforme") }}</div><a href="{{ url_for('platform') }}" class="{{ 'on' if ep=='platform' }}"><i class="bi bi-bar-chart-line"></i> Vue d'ensemble</a>
+  <a href="{{ url_for('platform_schools') }}" class="{{ 'on' if ep in ('platform_schools','platform_school') }}"><i class="bi bi-buildings"></i> Écoles</a>
+  <a href="{{ url_for('platform_keys') }}" class="{{ 'on' if ep=='platform_keys' }}"><i class="bi bi-key"></i> Clés de licence</a>{% endif %}
   <div class="grow"></div>
   <div class="langsw" role="group" aria-label="{{ _('Langue') }}">{% for code, name in LANGS.items() %}<a href="{{ lang_url(code) }}" class="{{ 'on' if lang==code }}" lang="{{ code }}">{{ name }}</a>{% endfor %}</div>
   <a href="{{ url_for('account') }}" class="{{ 'on' if ep=='account' }}"><i class="bi bi-key"></i> {{ _("Mon compte") }}</a>
@@ -45,6 +47,7 @@
 </nav>
 <main class="main" id="main">
   <div class="flashes" aria-live="polite">{% with msgs = get_flashed_messages(with_categories=true) %}{% for c, m in msgs %}<div class="flash {{ c }}"><i class="bi {{ 'bi-check-circle-fill' if c=='success' else 'bi-exclamation-triangle-fill' }}"></i><span>{{ m }}</span><button type="button" aria-label="{{ _('Fermer') }}" onclick="this.parentNode.remove()">×</button></div>{% endfor %}{% endwith %}</div>
+  {% if current_user.is_super and session.get('as_school') and school %}<div class="licbar"><i class="bi bi-eye"></i><span>Consultation de « {{ school.name }} » en tant qu'administrateur de la plateforme.</span><a class="btn sm o" href="{{ url_for('platform_leave') }}">Revenir à la plateforme</a></div>{% endif %}
   {% if lic and (lic.expired or (lic.warn and lic.left is not none and lic.left <= 15)) and ep != 'licence' %}
   <div class="licbar {{ 'exp' if lic.expired }}"><i class="bi {{ 'bi-lock-fill' if lic.expired else 'bi-hourglass-split' }}"></i>
     <span>{% if lic.expired %}{{ _("Licence expirée : vos données restent consultables, mais l'application est en lecture seule.") }}{% elif lic.plan == 'trial' %}{{ _("Essai gratuit : il reste {n} jour(s).", n=lic.left) }}{% else %}{{ _("Votre licence expire dans {n} jour(s).", n=lic.left) }}{% endif %}</span>

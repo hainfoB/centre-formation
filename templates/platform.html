@@ -1,42 +1,107 @@
 {% extends "base.html" %}{% block title %}Plateforme{% endblock %}{% block content %}
-<div class="head"><h1><i class="bi bi-buildings"></i> Plateforme — écoles & licences</h1></div>
-<div class="grid g4" style="margin-bottom:16px">
-<div class="kpi"><span>Écoles</span><b>{{ summary.schools }}</b></div>
-<div class="kpi o"><span>En essai</span><b>{{ summary.trial }}</b></div>
-<div class="kpi"><span>Clientes payantes</span><b>{{ summary.paid }}</b></div>
-<div class="kpi o"><span>Expirent ≤ 15 j</span><b>{{ summary.soon }}</b></div>
-<div class="kpi"><span>Expirées</span><b>{{ summary.expired }}</b></div></div>
+{% macro badge(sc) %}{% set left = sc.days_left(today) %}{% if not sc.active %}<span class="badge b-cancelled">suspendue</span>{% elif sc.expired(today) %}<span class="badge b-cancelled">expirée</span>{% elif sc.plan=='trial' %}<span class="badge b-pending">essai · {{ left }} j</span>{% else %}<span class="badge b-confirmed">{{ pnames[sc.plan] }}</span>{% endif %}{% endmacro %}
 
+{% if tab == 'home' %}
+<div class="head"><h1><i class="bi bi-bar-chart-line"></i> Vue d'ensemble de la plateforme</h1>
+<div class="row"><a class="btn ghost" href="{{ url_for('platform_export') }}"><i class="bi bi-file-earmark-excel"></i> Export Excel</a><a class="btn o" href="{{ url_for('platform_schools') }}#new"><i class="bi bi-plus-lg"></i> Nouvelle école</a></div></div>
+<h3 class="psec">Revenus des licences</h3>
+<div class="grid g4">
+<div class="kpi o"><span>Ce mois</span><b>{{ g_.rev_month|da }}</b></div>
+<div class="kpi o"><span>Cette année</span><b>{{ g_.rev_year|da }}</b></div>
+<div class="kpi"><span>Total encaissé</span><b>{{ g_.rev_total|da }}</b></div>
+<div class="kpi" style="border-top-color:#f59e0b"><span>Renouvellements à venir (60 j)</span><b>{{ g_.renew|da }}</b></div></div>
+<h3 class="psec">Écoles</h3>
+<div class="grid g4">
+<a class="kpi" href="{{ url_for('platform_schools') }}"><span>Écoles inscrites</span><b>{{ g_.schools }}</b><small>{{ g_.active }} actives</small></a>
+<a class="kpi o" href="{{ url_for('platform_schools', statut='essai') }}"><span>En essai</span><b>{{ g_.trial }}</b><small>taux de conversion {{ g_.conv }} %</small></a>
+<a class="kpi" href="{{ url_for('platform_schools', statut='payant') }}"><span>Clientes payantes</span><b>{{ g_.paid }}</b><small>Pass+ {{ by_plan.pass }} · Ultimate {{ by_plan.ultimate }} · À vie {{ by_plan.lifetime }}</small></a>
+<a class="kpi" style="border-top-color:#dc2626" href="{{ url_for('platform_schools', statut='expire') }}"><span>Expirées / suspendues</span><b>{{ g_.expired }} / {{ g_.suspended }}</b></a></div>
+<h3 class="psec">Activité de toutes les écoles</h3>
+<div class="grid g4">
+<div class="kpi"><span>Élèves</span><b>{{ g_.students }}</b></div>
+<div class="kpi"><span>Inscriptions confirmées</span><b>{{ g_.enrollments }}</b><small>{{ g_.formations }} formations</small></div>
+<div class="kpi"><span>Utilisateurs (personnel)</span><b>{{ g_.users }}</b></div>
+<div class="kpi o"><span>Frais encaissés par les écoles</span><b>{{ g_.collected|da }}</b></div></div>
+
+<div class="grid g2" style="margin-top:16px">
+<div class="card"><h2>Nouvelles écoles par mois</h2><div class="bars">{% for m in months %}<div class="bar"><i style="height:{{ (sign[m] / mx[0] * 100)|round }}%"></i><b>{{ sign[m] or '' }}</b><span>{{ m.strftime('%m/%y') }}</span></div>{% endfor %}</div></div>
+<div class="card"><h2>Ventes de licences par mois</h2><div class="bars o">{% for m in months %}<div class="bar" title="{{ sales[m]|da }}"><i style="height:{{ (sales[m] / mx[1] * 100)|round }}%"></i><b>{{ (sales[m]//1000 ~ 'k') if sales[m] else '' }}</b><span>{{ m.strftime('%m/%y') }}</span></div>{% endfor %}</div></div>
+</div>
+<div class="grid g2">
+<div class="card"><h2>Expirations (± 30 jours)</h2>{% if soon %}<table>{% for sc in soon %}{% set left = sc.days_left(today) %}<tr><td><a href="{{ url_for('platform_school', sid=sc.id) }}"><b>{{ sc.name }}</b></a><div class="xs muted">{{ pnames[sc.plan] }}</div></td><td class="small nowrap" style="color:{{ '#dc2626' if left < 0 else '#ea580c' }}">{{ sc.expires_on|d }}<div class="xs">{{ 'il y a ' ~ (-left) ~ ' j' if left < 0 else 'dans ' ~ left ~ ' j' }}</div></td><td>{% if sc.phone %}<a class="btn sm green" target="_blank" href="{{ wa(sc.phone, 'Bonjour ' ~ sc.name ~ ', votre licence HaithemEduAI expire le ' ~ sc.expires_on.strftime('%d/%m/%Y') ~ '. Souhaitez-vous la renouveler ?') }}"><i class="bi bi-whatsapp"></i></a>{% endif %}</td></tr>{% endfor %}</table>{% else %}<p class="muted small">Aucune expiration proche.</p>{% endif %}</div>
+<div class="card"><h2>Plus grandes écoles</h2><table>{% for sc in top %}<tr><td><a href="{{ url_for('platform_school', sid=sc.id) }}"><b>{{ sc.name }}</b></a></td><td>{{ badge(sc) }}</td><td class="nowrap"><b>{{ counts.get(sc.id, 0) }}</b> <span class="xs muted">élèves</span></td></tr>{% endfor %}</table></div>
+</div>
+<div class="card"><h2>Dernières inscriptions</h2><table>{% for sc in recent %}<tr><td><a href="{{ url_for('platform_school', sid=sc.id) }}"><b>{{ sc.name }}</b></a><div class="xs muted">{{ sc.city or '' }}</div></td><td class="small">{{ sc.created_at.strftime('%d/%m/%Y %H:%M') }}</td><td>{{ badge(sc) }}</td><td class="small">{{ (sc.phone or '')|ltr }}</td></tr>{% endfor %}</table></div>
+
+{% elif tab == 'schools' %}
+<div class="head"><h1><i class="bi bi-buildings"></i> Écoles</h1><a class="btn ghost" href="{{ url_for('platform_export') }}"><i class="bi bi-file-earmark-excel"></i> Export Excel</a></div>
+<div class="card"><form class="row"><input name="q" value="{{ q }}" placeholder="Nom, ville, téléphone…" style="max-width:260px">
+<select name="statut" style="max-width:200px">{% for v, l in [('', 'Toutes'), ('essai', 'En essai'), ('payant', 'Payantes'), ('bientot', 'Expirent ≤ 15 j'), ('expire', 'Expirées'), ('suspendue', 'Suspendues')] %}<option value="{{ v }}" {{ 'selected' if st==v }}>{{ l }}</option>{% endfor %}</select><button class="btn">Filtrer</button></form>
+<div class="tw" style="margin-top:12px"><table><tr><th>École</th><th>Responsable</th><th>Statut</th><th>Expiration</th><th>Élèves</th><th>Encaissé</th><th>Dernière activité</th><th></th></tr>
+{% for sc in items %}{% set x = stats[sc.id] %}<tr><td><a href="{{ url_for('platform_school', sid=sc.id) }}"><b>{{ sc.name }}</b></a><div class="xs muted">{{ sc.city or '' }} · {{ sc.created_at.strftime('%d/%m/%Y') }}</div></td>
+<td class="small">{% if x.admin %}{{ x.admin.name }}<div class="xs muted">{{ x.admin.email }}</div>{% endif %}</td><td>{{ badge(sc) }}</td>
+<td class="small nowrap">{{ sc.expires_on|d if sc.expires_on else '∞' }}</td><td>{{ x.students }}<div class="xs muted">{{ x.formations }} form. · {{ x.users }} comptes</div></td>
+<td class="small nowrap">{{ x.collected|da }}</td><td class="xs muted">{{ x.last.strftime('%d/%m/%Y') if x.last else '—' }}</td>
+<td class="nowrap"><a class="btn sm ghost" href="{{ url_for('platform_school', sid=sc.id) }}">Gérer</a></td></tr>{% else %}<tr><td colspan="8" class="muted">Aucune école.</td></tr>{% endfor %}</table></div></div>
+<div class="card" id="new"><h2>Créer une école</h2><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="fields">
+<div><label>Nom de l'établissement</label><input name="centre_name" required></div><div><label>Ville</label><input name="city"></div><div><label>Téléphone</label><input name="phone"></div>
+<div><label>Nom du responsable</label><input name="name" required></div><div><label>Email de connexion</label><input type="email" name="email" required></div><div><label>Mot de passe (8 min.)</label><input name="password" minlength="8" required></div>
+<div><label>Offre</label><select name="plan">{% for c, (d, p) in plans.items() %}<option value="{{ c }}">{{ pnames[c] }}{{ ' — ' ~ (p|da) if p }}</option>{% endfor %}</select></div></div>
+<button class="btn o" style="margin-top:12px">Créer l'école</button></form></div>
+
+{% elif tab == 'school' %}
+<div class="head"><h1>{{ sc.name }} {{ badge(sc) }}</h1>
+<div class="row"><a class="btn ghost" href="{{ url_for('platform_schools') }}">← Écoles</a>
+<form method="post" action="{{ url_for('platform_enter', sid=sc.id) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn o"><i class="bi bi-box-arrow-in-right"></i> Entrer dans l'école</button></form>
+<a class="btn ghost" href="{{ url_for('catalogue', sslug=sc.slug) }}" target="_blank"><i class="bi bi-globe2"></i> Catalogue</a></div></div>
+<div class="grid g4">
+<div class="kpi"><span>Élèves</span><b>{{ stx.students }}</b><small>{{ stx.enrollments }} inscriptions confirmées</small></div>
+<div class="kpi"><span>Formations / séances</span><b>{{ stx.formations }} / {{ stx.seances }}</b></div>
+<div class="kpi o"><span>Encaissé par l'école</span><b>{{ stx.collected|da }}</b></div>
+<div class="kpi o"><span>Licences payées</span><b>{{ revenue|da }}</b><small>dernière activité {{ stx.last.strftime('%d/%m/%Y') if stx.last else '—' }}</small></div></div>
+<div class="grid g2" style="margin-top:16px">
+<div class="card"><h2>Licence</h2>
+<p class="small">Offre : <b>{{ pnames[sc.plan] }}</b> · Expiration : <b>{{ sc.expires_on|d if sc.expires_on else 'jamais (à vie)' }}</b>{% if sc.support_until %} · Support jusqu'au {{ sc.support_until|d }}{% endif %}</p>
+<form method="post" class="row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="plan">
+<select name="plan" style="max-width:220px">{% for c, (d, p) in plans.items() %}<option value="{{ c }}">{{ pnames[c] }}{{ ' — ' ~ (p|da) if p }}</option>{% endfor %}</select><input name="note" placeholder="Note (paiement CCP…)" style="max-width:200px"><button class="btn">Appliquer / prolonger</button></form>
+<p class="xs muted">La durée s'ajoute à la date actuelle d'expiration ; la vente est enregistrée dans les revenus.</p>
+<form method="post" class="row" style="margin-top:10px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="expiry"><input type="date" name="expires_on" value="{{ sc.expires_on or '' }}" style="max-width:180px"><button class="btn ghost">Fixer la date</button><span class="xs muted">(vide = à vie)</span></form>
+<form method="post" style="margin-top:12px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="toggle"><button class="btn {{ 'red' if sc.active else 'green' }}" onclick="return confirm('Confirmer ?')">{{ 'Suspendre l’école' if sc.active else 'Réactiver l’école' }}</button></form></div>
+<div class="card"><h2>Informations</h2><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="info"><div class="fields">
+<div class="span2"><label>Nom (plateforme)</label><input name="name" value="{{ sc.name }}"></div><div><label>Ville</label><input name="city" value="{{ sc.city or '' }}"></div><div><label>Téléphone</label><input name="phone" value="{{ sc.phone or '' }}"></div>
+<div><label>Service client jusqu'au</label><input type="date" name="support_until" value="{{ sc.support_until or '' }}"></div><div><label>Adresse de l'école</label><input value="{{ sets.centre_address }}" disabled></div>
+<div class="span2"><label>Notes internes (paiements, échanges…)</label><textarea name="notes" rows="3">{{ sc.notes or '' }}</textarea></div></div>
+<div class="row" style="margin-top:10px"><button class="btn">Enregistrer</button>{% if sc.phone %}<a class="btn green" target="_blank" href="{{ wa(sc.phone, 'Bonjour ' ~ sc.name ~ ', ') }}"><i class="bi bi-whatsapp"></i> WhatsApp</a>{% endif %}</div></form></div>
+</div>
+<div class="card"><h2>Utilisateurs de l'école</h2><table><tr><th>Nom</th><th>Email</th><th>Rôle</th><th></th></tr>{% for u in users %}<tr><td><b>{{ u.name }}</b>{% if not u.active %} <span class="badge b-cancelled">désactivé</span>{% endif %}</td><td class="small">{{ u.email }}</td><td class="small">{{ L[u.role] }}</td>
+<td class="nowrap"><form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="user_id" value="{{ u.id }}"><button class="btn sm ghost" name="action" value="user_reset" onclick="return confirm('Générer un nouveau mot de passe ?')">Nouveau mot de passe</button><button class="btn sm ghost" name="action" value="user_toggle">{{ 'Désactiver' if u.active else 'Réactiver' }}</button></form></td></tr>{% endfor %}</table></div>
+<div class="grid g2">
+<div class="card"><h2>Historique des licences</h2>{% if keys %}<table>{% for k in keys %}<tr><td class="small">{{ k.used_at.strftime('%d/%m/%Y') }}</td><td class="small">{{ pnames[k.plan] }}</td><td class="small">{{ plans[k.plan][1]|da }}</td><td class="xs muted">{{ 'manuel' if k.code=='(manuel)' else 'clé' }} {{ k.note or '' }}</td></tr>{% endfor %}</table>{% else %}<p class="muted small">Aucune licence payée.</p>{% endif %}</div>
+<div class="card"><h2>Journal d'activité</h2><div class="tw" style="max-height:320px"><table>{% for l in logs %}<tr><td class="xs nowrap muted">{{ l.created_at.strftime('%d/%m %H:%M') }}</td><td class="small">{{ l.user }}</td><td class="small">{{ l.action }}</td></tr>{% endfor %}</table></div></div>
+</div>
+<div class="card danger"><h2>Zone dangereuse</h2><p class="small">Supprime définitivement l'école et toutes ses données (élèves, paiements, caisse, comptes). Exportez d'abord ses données en entrant dans l'école.</p>
+<form method="post" class="row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="delete"><input name="confirm" placeholder="Tapez : {{ sc.name }}" style="max-width:280px" autocomplete="off"><button class="btn red" onclick="return confirm('Suppression définitive ?')">Supprimer l'école</button></form></div>
+
+{% elif tab == 'keys' %}
+<div class="head"><h1><i class="bi bi-key"></i> Clés de licence</h1></div>
 {% if new_key %}<div class="card newkey"><h2><i class="bi bi-key-fill"></i> Nouvelle clé</h2>
-<div class="row" style="gap:8px"><input id="nk" value="{{ new_key }}" readonly dir="ltr" style="font-family:monospace;flex:1"><button type="button" class="btn o" data-copy="nk"><i class="bi bi-clipboard"></i></button></div>
-<p class="xs muted">Envoyez-la à l'école : Abonnement & données → Activer une clé. Utilisable une seule fois.</p></div>{% endif %}
-
+<div class="row" style="gap:8px"><input id="nk" value="{{ new_key }}" readonly dir="ltr" style="font-family:monospace;flex:1"><button type="button" class="btn o" data-copy="nk"><i class="bi bi-clipboard"></i></button>
+<a class="btn green" target="_blank" href="{{ wa('', 'Votre clé de licence HaithemEduAI : ' ~ new_key ~ '  — à coller dans Abonnement & données → Activer une clé.') }}"><i class="bi bi-whatsapp"></i></a></div>
+<p class="xs muted">L'école la colle dans « Abonnement & données → Activer une clé ». Utilisable une seule fois.</p></div>{% endif %}
 <div class="card"><h2>Générer une clé</h2>
-<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="key">
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="fields">
-<div><label>Offre</label><select name="plan">{% for c, (d, p) in plans.items() %}{% if c != 'trial' %}<option value="{{ c }}">{{ pnames[c] }} — {{ p|da }}</option>{% endif %}{% endfor %}<option value="trial">Prolongation essai (+30 j)</option></select></div>
+<div><label>Offre</label><select name="plan">{% for c, (d, p) in plans.items() %}{% if c != 'trial' %}<option value="{{ c }}">{{ pnames[c] }} — {{ p|da }}</option>{% endif %}{% endfor %}<option value="trial">Prolongation d'essai (+30 j)</option></select></div>
 <div><label>Type</label><select name="kind"><option value="short">En ligne — courte (HEDU-…)</option><option value="signed">Hors ligne — signée (HEDUL-…)</option></select></div>
-<div><label>Nom exact de l'école (clé signée)</label><input name="bound_name" placeholder="vide = toute école"></div>
+<div><label>Nom exact de l'école (clé signée)</label><input name="bound_name" list="snames" placeholder="vide = toute école"><datalist id="snames">{% for sc in schools %}<option value="{{ sc.name }}">{% endfor %}</datalist></div>
 <div><label>Note (client, paiement…)</label><input name="note"></div></div>
 <p class="xs muted">L'offre « À vie » produit toujours une clé signée : elle fonctionne en ligne et sur une installation locale sans Internet.{% if not can_sign %} <b style="color:#dc2626">LICENSE_PRIVATE_KEY non configurée.</b>{% endif %}</p>
 <button class="btn o">Générer</button></form></div>
-
-<div class="card"><h2>Écoles</h2><input data-filter="sch" placeholder="Filtrer…" style="max-width:260px;margin-bottom:10px">
-<div class="tw"><table id="sch"><tr><th>École</th><th>Responsable</th><th>Offre</th><th>Expiration</th><th>Élèves</th><th>Actions</th></tr>
-{% for sc in schools %}{% set st = stats[sc.id] %}{% set left = sc.days_left(today) %}
-<tr data-row><td><b>{{ sc.name }}</b>{% if not sc.active %} <span class="badge b-cancelled">suspendue</span>{% endif %}<div class="xs muted">{{ sc.city or '' }} · créée le {{ sc.created_at.strftime('%d/%m/%Y') }}</div></td>
-<td class="small">{% if st.admin %}{{ st.admin.name }}<div class="xs muted">{{ st.admin.email }}</div>{% endif %}{% if sc.phone %}<a class="xs" href="{{ wa(sc.phone, 'Bonjour ' ~ sc.name ~ ', ') }}" target="_blank"><i class="bi bi-whatsapp"></i> {{ sc.phone|ltr }}</a>{% endif %}</td>
-<td><span class="badge {{ 'b-open' if sc.plan!='trial' else 'b-pending' }}">{{ pnames[sc.plan] }}</span></td>
-<td class="small nowrap">{% if sc.expires_on is none %}∞{% else %}<span style="color:{{ '#dc2626' if left < 0 else ('#ea580c' if left <= 15 else 'inherit') }}">{{ sc.expires_on|d }}</span><div class="xs muted">{{ left }} j</div>{% endif %}</td>
-<td>{{ st.students }}<div class="xs muted">{{ st.users }} compte(s)</div></td>
-<td><form method="post" class="row" style="gap:4px;flex-wrap:wrap"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="school_id" value="{{ sc.id }}">
-<select name="plan" class="sm">{% for c in plans %}<option value="{{ c }}">{{ pnames[c] }}</option>{% endfor %}</select><button class="btn sm" name="action" value="plan">Appliquer</button>
-<input type="date" name="expires_on" value="{{ sc.expires_on or '' }}" class="sm"><button class="btn sm ghost" name="action" value="expiry">Date</button>
-<button class="btn sm {{ 'red' if sc.active else 'green' }}" name="action" value="toggle" onclick="return confirm('Confirmer ?')">{{ 'Suspendre' if sc.active else 'Réactiver' }}</button></form></td></tr>
-{% endfor %}</table></div></div>
-
-<div class="card"><h2>Clés émises</h2><div class="tw"><table><tr><th>Créée</th><th>Offre</th><th>Clé</th><th>Note</th><th>Utilisée par</th></tr>
+<div class="card"><div class="row" style="justify-content:space-between"><h2>Clés émises</h2><div class="row">{% for v, l in [('', 'Toutes'), ('libre', 'Libres'), ('utilisee', 'Utilisées')] %}<a class="btn sm {{ 'o' if st==v else 'ghost' }}" href="{{ url_for('platform_keys', statut=v) }}">{{ l }}</a>{% endfor %}</div></div>
+<div class="tw"><table><tr><th>Créée</th><th>Offre</th><th>Clé</th><th>Note</th><th>Utilisée par</th><th></th></tr>
 {% for k in keys %}<tr><td class="xs nowrap">{{ k.created_at.strftime('%d/%m/%Y') }}</td><td class="small">{{ pnames[k.plan] }}</td>
 <td class="xs" dir="ltr" style="font-family:monospace;max-width:280px;word-break:break-all">{{ k.code }}</td><td class="xs muted">{{ k.note or '' }}{% if k.bound_name %}<div>→ {{ k.bound_name }}</div>{% endif %}</td>
-<td class="small">{% if k.used_school_id %}{{ names.get(k.used_school_id, '#' ~ k.used_school_id) }}<div class="xs muted">{{ k.used_at.strftime('%d/%m/%Y') }}</div>{% else %}<span class="badge b-pending">libre</span>{% endif %}</td></tr>{% endfor %}</table></div></div>
+<td class="small">{% if k.used_school_id %}<a href="{{ url_for('platform_school', sid=k.used_school_id) }}">{{ names.get(k.used_school_id, '#' ~ k.used_school_id) }}</a><div class="xs muted">{{ k.used_at.strftime('%d/%m/%Y') }}</div>{% else %}<span class="badge b-pending">libre</span>{% endif %}</td>
+<td>{% if not k.used_school_id %}<form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="revoke"><input type="hidden" name="key_id" value="{{ k.id }}"><button class="btn sm red" onclick="return confirm('Révoquer cette clé ?')"><i class="bi bi-x-lg"></i></button></form>{% endif %}</td></tr>{% endfor %}</table></div></div>
+{% endif %}
 {% endblock %}

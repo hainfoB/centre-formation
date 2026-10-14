@@ -316,7 +316,7 @@ _PUBLIC = {"scan_page": (Seance, "scan_token", "token"), "scan_check": (Seance, 
            "verify": (Enrollment, "token", "token"), "ticket": (Enrollment, "token", "token"),
            "ticket_code": (Enrollment, "token", "token"), "parent_space": (Student, "parent_token", "token"),
            "catalogue": (School, "slug", "sslug")}
-_READONLY_OK = {"licence", "logout", "login", "account", "data_export", "signup", "platform", "static"}
+_READONLY_OK = {"licence", "logout", "login", "account", "data_export", "signup", "static"}
 
 
 def tenant_context():
@@ -326,6 +326,11 @@ def tenant_context():
         return None
     if current_user.is_authenticated and request.endpoint != "catalogue":
         g.school_id = current_user.school_id
+        if current_user.is_super and session.get("as_school"):
+            g.school_id = session["as_school"]
+        if current_user.is_super and not g.school_id and not LOCAL and request.endpoint and \
+                not (request.endpoint.startswith("platform") or request.endpoint in ("logout", "account", "static", "login")):
+            return redirect(url_for("platform"))
     elif request.endpoint in _PUBLIC and request.view_args:
         model, col, arg = _PUBLIC[request.endpoint]
         with unscoped():
@@ -344,7 +349,8 @@ def tenant_context():
             logout_user()
             flash(_("Le compte de cette école est suspendu. Contactez-nous sur WhatsApp."), "error")
             return redirect(url_for("login"))
-        if sc and sc.expired(today()) and request.method == "POST" and request.endpoint not in _READONLY_OK:
+        if sc and sc.expired(today()) and request.method == "POST" and request.endpoint not in _READONLY_OK \
+                and not (request.endpoint or "").startswith("platform"):
             if current_user.is_authenticated:
                 flash(_("Licence expirée : l'application est en lecture seule. Renouvelez pour continuer."), "error")
                 return redirect(url_for("licence"))
@@ -467,6 +473,7 @@ def login():
 
 @app.route("/logout")
 def logout():
+    session.pop("as_school", None)
     logout_user()
     return redirect(url_for("login"))
 
@@ -2321,54 +2328,254 @@ def super_required(fn):
     return inner
 
 
-@app.route("/plateforme", methods=["GET", "POST"])
+def _months_back(n):
+    d = today().replace(day=1)
+    out = []
+    for _i in range(n):
+        out.append(d)
+        d = (d - timedelta(days=1)).replace(day=1)
+    return list(reversed(out))
+
+
+def school_stats(sc):
+    q = lambda m: m.query.filter_by(school_id=sc.id)  # noqa: E731
+    paid = db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+        Payment.school_id == sc.id, Payment.status == "paid").scalar()
+    last = AuditLog.query.filter_by(school_id=sc.id).order_by(AuditLog.id.desc()).first()
+    return {"students": q(Student).count(), "formations": q(Formation).count(), "users": q(User).count(),
+            "enrollments": q(Enrollment).filter(Enrollment.status == "confirmed").count(),
+            "seances": q(Seance).count(), "collected": int(paid or 0),
+            "admin": q(User).filter_by(role="admin").order_by(User.id).first(),
+            "last": last.created_at if last else None}
+
+
+def record_sale(sc, plan, note):
+    """Every plan applied by hand is kept with the keys, so licence revenue stays complete."""
+    db.session.add(LicenseKey(digest=tenancy.digest(tenancy.make_short_key()), code="(manuel)", plan=plan, note=note[:200],
+                              used_school_id=sc.id, used_at=datetime.utcnow()))
+
+
+@app.route("/plateforme")
 @super_required
 def platform():
+    schools = School.query.all()
+    t = today()
+    used = LicenseKey.query.filter(LicenseKey.used_school_id.isnot(None), LicenseKey.plan != "trial").all()
+    rev = lambda keys: sum(PLANS[k.plan][1] for k in keys)  # noqa: E731
+    m0 = t.replace(day=1)
+    y0 = t.replace(month=1, day=1)
+    months = _months_back(12)
+    sign = {m: 0 for m in months}
+    sales = {m: 0 for m in months}
+    for sc in schools:
+        k = sc.created_at.date().replace(day=1)
+        if k in sign:
+            sign[k] += 1
+    for k in used:
+        mk = k.used_at.date().replace(day=1)
+        if mk in sales:
+            sales[mk] += PLANS[k.plan][1]
+    by_plan = {p: sum(1 for sc in schools if sc.plan == p and not sc.expired(t)) for p in PLANS}
+    g_ = {"schools": len(schools), "active": sum(1 for sc in schools if sc.active and not sc.expired(t)),
+          "trial": by_plan["trial"], "paid": sum(by_plan[p] for p in ("pass", "ultimate", "lifetime")),
+          "expired": sum(1 for sc in schools if sc.expired(t)), "suspended": sum(1 for sc in schools if not sc.active),
+          "students": Student.query.count(), "users": User.query.filter(User.school_id.isnot(None)).count(),
+          "formations": Formation.query.count(), "enrollments": Enrollment.query.filter_by(status="confirmed").count(),
+          "collected": int(db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(Payment.status == "paid").scalar() or 0),
+          "rev_total": rev(used), "rev_month": rev([k for k in used if k.used_at.date() >= m0]),
+          "rev_year": rev([k for k in used if k.used_at.date() >= y0]),
+          "conv": round(100 * sum(1 for sc in schools if sc.plan != "trial") / len(schools)) if schools else 0,
+          "renew": sum(PLANS[sc.plan][1] for sc in schools if sc.plan in ("pass", "ultimate") and sc.expires_on
+                       and t <= sc.expires_on <= t + timedelta(days=60))}
+    soon = sorted([sc for sc in schools if sc.expires_on and -30 <= (sc.expires_on - t).days <= 30],
+                  key=lambda sc: sc.expires_on)
+    counts = dict(db.session.query(Student.school_id, func.count(Student.id)).group_by(Student.school_id).all())
+    top = sorted(schools, key=lambda sc: -counts.get(sc.id, 0))[:8]
+    recent = sorted(schools, key=lambda sc: sc.created_at, reverse=True)[:8]
+    mx = max(list(sign.values()) + [1]), max(list(sales.values()) + [1])
+    return render_template("platform.html", g_=g_, by_plan=by_plan, months=months, sign=sign, sales=sales, mx=mx,
+                           soon=soon, top=top, counts=counts, recent=recent, pnames=PLAN_NAMES, plans=PLANS, tab="home")
+
+
+@app.route("/plateforme/ecoles", methods=["GET", "POST"])
+@super_required
+def platform_schools():
+    if request.method == "POST":
+        f = request.form
+        err = _signup_form_errors(f)
+        if err:
+            flash(err, "error")
+        else:
+            plan = f.get("plan") if f.get("plan") in PLANS else "trial"
+            sc, _u = create_school(f["centre_name"].strip(), f["name"].strip(), f["email"].strip().lower(), f["password"],
+                                   phone=f.get("phone", ""), city=f.get("city", ""), plan=plan)
+            if plan != "trial":
+                record_sale(sc, plan, "création par la plateforme")
+            db.session.commit()
+            flash(f"École « {sc.name} » créée ({PLAN_NAMES[plan]}).", "success")
+            return redirect(url_for("platform_school", sid=sc.id))
+    t = today()
+    st = request.args.get("statut", "")
+    qtxt = request.args.get("q", "").strip().lower()
+    items = School.query.order_by(School.created_at.desc()).all()
+    def keep(sc):
+        if qtxt and qtxt not in (sc.name + " " + (sc.city or "") + " " + (sc.phone or "")).lower():
+            return False
+        return {"": True, "essai": sc.plan == "trial" and not sc.expired(t), "payant": sc.plan != "trial" and not sc.expired(t),
+                "expire": sc.expired(t), "bientot": sc.expires_on is not None and 0 <= (sc.expires_on - t).days <= 15,
+                "suspendue": not sc.active}.get(st, True)
+    items = [sc for sc in items if keep(sc)]
+    stats = {sc.id: school_stats(sc) for sc in items}
+    return render_template("platform.html", tab="schools", items=items, stats=stats, st=st, q=qtxt,
+                           pnames=PLAN_NAMES, plans=PLANS)
+
+
+@app.route("/plateforme/ecoles/<int:sid>", methods=["GET", "POST"])
+@super_required
+def platform_school(sid):
+    sc = School.query.get_or_404(sid)
+    if request.method == "POST":
+        f, act = request.form, request.form.get("action")
+        if act == "info":
+            sc.name = f.get("name", sc.name).strip()[:160] or sc.name
+            sc.city, sc.phone = f.get("city", "").strip()[:80], f.get("phone", "").strip()[:30]
+            sc.notes = f.get("notes", "")[:4000]
+            sc.support_until = parse_date(f.get("support_until"))
+            flash("Informations enregistrées.", "success")
+        elif act == "plan" and f.get("plan") in PLANS:
+            tenancy.apply_plan(sc, f["plan"], today())
+            if f["plan"] != "trial":
+                record_sale(sc, f["plan"], f.get("note") or "appliqué par la plateforme")
+            flash(f"{PLAN_NAMES[f['plan']]} appliqué.", "success")
+        elif act == "expiry":
+            sc.expires_on = parse_date(f.get("expires_on"))
+            flash("Date d'expiration modifiée." if sc.expires_on else "Licence rendue définitive.", "success")
+        elif act == "toggle":
+            sc.active = not sc.active
+            flash("École réactivée." if sc.active else "École suspendue : ses utilisateurs ne peuvent plus se connecter.", "success")
+        elif act in ("user_reset", "user_toggle"):
+            u = User.query.filter_by(id=f.get("user_id", type=int), school_id=sc.id).first_or_404()
+            if act == "user_reset":
+                pw = secrets.token_urlsafe(8)
+                u.set_password(pw)
+                flash(f"Nouveau mot de passe de {u.name} ({u.email}) : {pw}", "success")
+            else:
+                u.active = not u.active
+        elif act == "delete":
+            if f.get("confirm", "").strip() != sc.name:
+                flash("Tapez le nom exact de l'école pour confirmer la suppression.", "error")
+                return redirect(url_for("platform_school", sid=sc.id))
+            for m in (Attendance, Payment, CashEntry, Enrollment, Seance, Formation, Student, Setting, AuditLog, User):
+                m.query.filter_by(school_id=sc.id).delete(synchronize_session=False)
+            name = sc.name
+            db.session.delete(sc)
+            db.session.commit()
+            flash(f"École « {name} » et toutes ses données supprimées.", "success")
+            return redirect(url_for("platform_schools"))
+        db.session.commit()
+        return redirect(url_for("platform_school", sid=sc.id))
+    stx = school_stats(sc)
+    users = User.query.filter_by(school_id=sc.id).order_by(User.role, User.name).all()
+    keys = LicenseKey.query.filter_by(used_school_id=sc.id).order_by(LicenseKey.id.desc()).all()
+    logs = AuditLog.query.filter_by(school_id=sc.id).order_by(AuditLog.id.desc()).limit(30).all()
+    with as_school(sc.id):
+        sets = Setting.all()
+    return render_template("platform.html", tab="school", sc=sc, stx=stx, users=users, keys=keys, logs=logs, sets=sets,
+                           pnames=PLAN_NAMES, plans=PLANS, revenue=sum(PLANS[k.plan][1] for k in keys if k.plan != "trial"))
+
+
+@app.route("/plateforme/cles", methods=["GET", "POST"])
+@super_required
+def platform_keys():
     new_key = None
     if request.method == "POST":
         f = request.form
-        act = f.get("action")
-        sc = db.session.get(School, f.get("school_id", type=int)) if f.get("school_id") else None
-        if act == "plan" and sc and f.get("plan") in PLANS:
-            tenancy.apply_plan(sc, f["plan"], today())
-            flash(f"{sc.name} : {PLAN_NAMES[f['plan']]} appliqué.", "success")
-        elif act == "expiry" and sc:
-            sc.expires_on = parse_date(f.get("expires_on"))
-            flash(f"{sc.name} : date d'expiration modifiée.", "success")
-        elif act == "toggle" and sc:
-            sc.active = not sc.active
-            flash(f"{sc.name} : {'réactivée' if sc.active else 'suspendue'}.", "success")
-        elif act == "notes" and sc:
-            sc.notes = f.get("notes", "")[:2000]
-        elif act == "key" and f.get("plan") in PLANS:
+        if f.get("action") == "revoke":
+            k = LicenseKey.query.get_or_404(f.get("key_id", type=int))
+            if not k.used_school_id:
+                db.session.delete(k)
+                flash("Clé supprimée.", "success")
+            db.session.commit()
+            return redirect(url_for("platform_keys"))
+        if f.get("plan") in PLANS:
             plan, bound = f["plan"], f.get("bound_name", "").strip()
             if f.get("kind") == "signed" or plan == "lifetime":
                 if not tenancy.can_sign():
                     flash("LICENSE_PRIVATE_KEY absente : impossible de signer une clé hors ligne.", "error")
-                    return redirect(url_for("platform"))
+                    return redirect(url_for("platform_keys"))
                 code = tenancy.make_signed_key(plan, bound)
             else:
                 code, bound = tenancy.make_short_key(), ""
             db.session.add(LicenseKey(digest=tenancy.digest(code), code=code, plan=plan, bound_name=bound or None,
                                       note=f.get("note", "")[:200]))
+            db.session.commit()
             new_key = code
+    st = request.args.get("statut", "")
+    q = LicenseKey.query.filter(LicenseKey.code != "(manuel)")
+    if st == "libre":
+        q = q.filter(LicenseKey.used_school_id.is_(None))
+    elif st == "utilisee":
+        q = q.filter(LicenseKey.used_school_id.isnot(None))
+    keys = q.order_by(LicenseKey.id.desc()).limit(200).all()
+    names = {sc.id: sc.name for sc in School.query.all()}
+    return render_template("platform.html", tab="keys", keys=keys, names=names, new_key=new_key, st=st,
+                           pnames=PLAN_NAMES, plans=PLANS, can_sign=tenancy.can_sign(),
+                           schools=School.query.order_by(School.name).all())
+
+
+@app.route("/plateforme/entrer/<int:sid>", methods=["POST"])
+@super_required
+def platform_enter(sid):
+    sc = School.query.get_or_404(sid)
+    session["as_school"] = sc.id
+    db.session.add(AuditLog(school_id=sc.id, user=current_user.name, action="platform_view", details="consultation plateforme"))
+    db.session.commit()
+    flash(f"Vous consultez « {sc.name} » en tant qu'administrateur de la plateforme.", "success")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/plateforme/sortir")
+@login_required
+def platform_leave():
+    session.pop("as_school", None)
+    return redirect(url_for("platform"))
+
+
+@app.route("/plateforme/export.xlsx")
+@super_required
+def platform_export():
+    rows = [["École", "Ville", "Téléphone", "Offre", "Expiration", "Active", "Créée le", "Responsable", "Email",
+             "Élèves", "Formations", "Utilisateurs", "Encaissé (DA)"]]
+    for sc in School.query.order_by(School.created_at).all():
+        x = school_stats(sc)
+        rows.append([sc.name, sc.city or "", sc.phone or "", PLAN_NAMES[sc.plan], sc.expires_on.strftime("%d/%m/%Y") if sc.expires_on else "à vie",
+                     "oui" if sc.active else "suspendue", sc.created_at.strftime("%d/%m/%Y"),
+                     x["admin"].name if x["admin"] else "", x["admin"].email if x["admin"] else "",
+                     x["students"], x["formations"], x["users"], x["collected"]])
+    return xlsx(rows, f"ecoles_{today()}.xlsx")
+
+
+def ensure_superadmin():
+    """SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD: the platform owner's own account (no school attached)."""
+    email = (os.environ.get("SUPERADMIN_EMAIL") or "").strip().lower()
+    pw = os.environ.get("SUPERADMIN_PASSWORD") or ""
+    if not email or len(pw) < 8:
+        return
+    with app.app_context(), unscoped():
+        u = User.query.filter_by(email=email).first()
+        if not u:
+            u = User(name="Administrateur plateforme", email=email, role="admin", is_super=True, school_id=None)
+            u.set_password(pw)
+            db.session.add(u)
+            print(f"👑 Compte plateforme créé : {email}")
+        else:
+            u.is_super, u.active = True, True
+            if os.environ.get("SUPERADMIN_RESET"):
+                u.set_password(pw)
         db.session.commit()
-        if not new_key:
-            return redirect(url_for("platform"))
-    schools = School.query.order_by(School.created_at.desc()).all()
-    stats = {}
-    for sc in schools:
-        stats[sc.id] = {"students": Student.query.filter_by(school_id=sc.id).count(),
-                        "users": User.query.filter_by(school_id=sc.id).count(),
-                        "admin": User.query.filter_by(school_id=sc.id, role="admin").order_by(User.id).first()}
-    keys = LicenseKey.query.order_by(LicenseKey.id.desc()).limit(60).all()
-    names = {sc.id: sc.name for sc in schools}
-    paid = [sc for sc in schools if sc.plan != "trial"]
-    summary = {"schools": len(schools), "trial": sum(1 for sc in schools if sc.plan == "trial" and not sc.expired(today())),
-               "paid": len(paid), "expired": sum(1 for sc in schools if sc.expired(today())),
-               "soon": sum(1 for sc in schools if sc.days_left(today()) is not None and 0 <= sc.days_left(today()) <= 15)}
-    return render_template("platform.html", schools=schools, stats=stats, keys=keys, names=names, summary=summary,
-                           plans=PLANS, pnames=PLAN_NAMES, new_key=new_key, can_sign=tenancy.can_sign())
+
+
+ensure_superadmin()
 
 
 @app.route("/health")

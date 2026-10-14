@@ -125,3 +125,9 @@ details>summary{cursor:pointer;font-weight:700;list-style:none}details>summary::
 .signupcta{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;text-align:center}
 .newkey{border:2px solid var(--orange)}
 select.sm,input.sm{padding:4px 6px;font-size:12.5px;min-height:30px;width:auto}
+.psec{margin:18px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+a.kpi{text-decoration:none;color:inherit;display:block}a.kpi:hover{box-shadow:0 0 0 2px var(--orange)}
+.bars{display:flex;align-items:flex-end;gap:6px;height:170px;padding-top:10px}.bar{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;min-width:0}
+.bar i{display:block;width:100%;background:var(--navy);border-radius:5px 5px 0 0;min-height:2px}.bars.o .bar i{background:var(--orange)}
+.bar b{font-size:11px}.bar span{font-size:10px;color:var(--muted);white-space:nowrap}
+.card.danger{border:1.5px solid #fecaca}

@@ -89,7 +89,7 @@ T["fr"] = {
     "wa": "Parler sur WhatsApp", "wa_text": "Bonjour, je souhaite en savoir plus sur HaithemEduAI.",
     "wa_plan": "Bonjour, je souhaite l'offre {plan} de HaithemEduAI.",
     "foot": "Gestion d'école simple et complète", "rights": "Tous droits réservés",
-    "menu": "Menu", "prev": "Précédent", "next": "Suivant",
+    "top": "Haut de page", "menu": "Menu", "prev": "Précédent", "next": "Suivant",
     "title": "HaithemEduAI — logiciel de gestion d'école, présences QR, paiements et WhatsApp",
     "desc": "Gérez élèves, présences par QR code, paiements et relances WhatsApp. En arabe, français et anglais. 30 jours gratuits.",
 }
@@ -174,7 +174,7 @@ T["ar"] = {
     "wa": "تحدث معنا على واتساب", "wa_text": "السلام عليكم، أريد معرفة المزيد عن HaithemEduAI.",
     "wa_plan": "السلام عليكم، أريد عرض {plan} من HaithemEduAI.",
     "foot": "إدارة مدرسية بسيطة وكاملة", "rights": "جميع الحقوق محفوظة",
-    "menu": "القائمة", "prev": "السابق", "next": "التالي",
+    "top": "أعلى الصفحة", "menu": "القائمة", "prev": "السابق", "next": "التالي",
     "title": "HaithemEduAI — برنامج إدارة المدارس: حضور QR ودفعات وواتساب",
     "desc": "أدِر التلاميذ والحضور برمز QR والدفعات وتذكير الأولياء عبر واتساب. بالعربية والفرنسية والإنجليزية. 30 يومًا مجانًا.",
 }
@@ -259,7 +259,7 @@ T["en"] = {
     "wa": "Chat on WhatsApp", "wa_text": "Hello, I would like to know more about HaithemEduAI.",
     "wa_plan": "Hello, I would like the {plan} plan of HaithemEduAI.",
     "foot": "Simple and complete school management", "rights": "All rights reserved",
-    "menu": "Menu", "prev": "Previous", "next": "Next",
+    "top": "Back to top", "menu": "Menu", "prev": "Previous", "next": "Next",
     "title": "HaithemEduAI — school management software: QR attendance, payments and WhatsApp",
     "desc": "Manage students, QR-code attendance, payments and WhatsApp reminders. In Arabic, French and English. 30 days free.",
 }

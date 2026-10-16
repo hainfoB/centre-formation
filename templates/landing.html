@@ -15,10 +15,11 @@
   <a class="brand" href="#top"><span class="mark"><i class="bi bi-mortarboard-fill"></i></span><b>{{ c.name }}</b></a>
   <nav id="menu" aria-label="{{ c.menu }}">
     {% for k, label in c.nav %}<a href="#{{ k }}">{{ label }}</a>{% endfor %}
+    <div class="menu-cta"><a class="btn ghost" href="{{ url_for('login') }}"><i class="bi bi-box-arrow-in-right"></i> {{ c.login }}</a><a class="btn o" href="{{ url_for('signup') }}">{{ c.signup }}</a></div>
   </nav>
   <div class="navr">
     <div class="langs">{% for code, nm in langs.items() %}<a href="?lang={{ code }}" class="{{ 'on' if code == lang }}" hreflang="{{ code }}">{{ code|upper }}</a>{% endfor %}</div>
-    <a class="lnk" href="{{ url_for('login') }}">{{ c.login }}</a>
+    <a class="lnk" href="{{ url_for('login') }}"><i class="bi bi-box-arrow-in-right"></i><span>{{ c.login }}</span></a>
     <a class="btn o sm" href="{{ url_for('signup') }}">{{ c.signup_short }}</a>
     <button class="burger" aria-label="{{ c.menu }}" onclick="document.body.classList.toggle('menu-open')"><i class="bi bi-list"></i></button>
   </div>
@@ -34,12 +35,13 @@
       <div class="cta">
         <a class="btn o lg pulse" href="{{ url_for('signup') }}">{{ c.signup }}</a>
         <a class="btn ghost lg" href="{{ url_for('static', filename='catalogue/HaithemEduAI-' ~ lang ~ '.pdf') }}" download><i class="bi bi-file-earmark-pdf"></i> {{ c.hero_cta2 }}</a>
+        <a class="btn light lg" href="{{ url_for('login') }}"><i class="bi bi-box-arrow-in-right"></i> {{ c.login }}</a>
       </div>
       <ul class="points">{% for p in c.hero_points %}<li><i class="bi bi-check2-circle"></i>{{ p }}</li>{% endfor %}</ul>
     </div>
     <div class="stage" id="carousel" aria-roledescription="carousel">
       <div class="browser">
-        <div class="bar"><i></i><i></i><i></i><span>{{ c.name|lower }}.app</span></div>
+        <div class="bar"><i></i><i></i><i></i><span>{{ c.name|lower }}.app</span><a class="pill" href="{{ url_for('login') }}">{{ c.login }}</a><a class="pill o" href="{{ url_for('signup') }}">{{ c.signup_short }}</a></div>
         <div class="shots">
           {% for n in hero %}<img class="shot{{ ' on' if loop.first }}" src="{{ I }}/{{ n }}.jpg" alt="{{ c.slides[loop.index0][0] }}" {{ 'fetchpriority=high' if loop.first else 'loading=lazy' }} width="1280" height="800">{% endfor %}
         </div>
@@ -137,7 +139,10 @@
 
 <footer class="foot"><div class="wrap"><span class="brand"><span class="mark"><i class="bi bi-mortarboard-fill"></i></span><b>{{ c.name }}</b> · {{ c.foot }}</span>
 <span>© {{ year }} {{ c.name }} — {{ c.rights }}</span></div></footer>
+<nav class="secnav" id="secnav" aria-label="{{ c.menu }}">{% set nv = dict(c.nav) %}{% for k, label in [('top', c.name), ('features', nv.features), ('how', nv.how), ('modules', nv.modules), ('about', nv.about), ('pricing', nv.pricing), ('catalogue', c.cat_h), ('faq', nv.faq), ('signup', c.signup_short)] %}<a href="#{{ k }}" data-s="{{ k }}"><span>{{ label }}</span><i></i></a>{% endfor %}</nav>
+<button class="totop" id="totop" aria-label="{{ c.top }}"><i class="bi bi-arrow-up"></i></button>
+<div class="mbar"><a class="btn ghost" href="{{ url_for('login') }}"><i class="bi bi-box-arrow-in-right"></i> {{ c.login }}</a><a class="btn o" href="{{ url_for('signup') }}">{{ c.signup_short }}</a></div>
 <a class="wafab" href="{{ wa }}" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a>
-<script>window.LP={tabs:{{ c.tabs|tojson }},slides:{{ c.slides|tojson }}};</script>
+<script>window.LP={next:{{ c.next|tojson }},tabs:{{ c.tabs|tojson }},slides:{{ c.slides|tojson }}};</script>
 <script src="{{ url_for('static', filename='landing.js') }}?v=1" defer></script>
 </body></html>

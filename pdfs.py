@@ -154,3 +154,109 @@ def _draw_certificate(c, W, H, centre, logo, student, formation, enr, stats, ver
     c.setFont("Helvetica", 7)
     c.setFillColor(GREY)
     c.drawCentredString(W - 105, 32, "Vérifier l'authenticité")
+
+
+# ── Student ID cards (CR80, 10 per A4) with QR code + Code128 barcode ────────────────────────────
+def _shape(text, bold=False):
+    text = text or ""
+    font = "Helvetica-Bold" if bold else "Helvetica"
+    if _AR_RE.search(text) and _HAS_AR:
+        try:
+            import arabic_reshaper
+            from bidi.algorithm import get_display
+            text = get_display(arabic_reshaper.reshape(text))
+        except Exception:  # noqa: BLE001
+            pass
+        font = "Taj-Bold" if bold else "Taj"
+    return text, font
+
+
+def _fit(c, text, x, y, maxw, size, minsize=6, bold=False, align="left", color=None):
+    text, font = _shape(text, bold)
+    while size > minsize and pdfmetrics.stringWidth(text, font, size) > maxw:
+        size -= .5
+    while pdfmetrics.stringWidth(text, font, size) > maxw and len(text) > 3:
+        text = text[:-2]
+    if color is not None:
+        c.setFillColor(color)
+    c.setFont(font, size)
+    {"left": c.drawString, "center": c.drawCentredString, "right": c.drawRightString}[align](x, y, text)
+
+
+def _draw_card(c, x, y, W, H, centre, logo, card):
+    """x, y = bottom-left of the card (points)."""
+    from reportlab.graphics.barcode import code128
+    from reportlab.lib.units import mm
+    c.saveState()
+    c.setFillColor(white)
+    c.setStrokeColor(HexColor("#cbd5e1"))
+    c.setLineWidth(.4)
+    c.roundRect(x, y, W, H, 3 * mm, fill=1, stroke=1)
+    # header band
+    hh = 13 * mm
+    p = c.beginPath()
+    p.roundRect(x, y + H - hh, W, hh, 3 * mm)
+    c.clipPath(p, stroke=0, fill=0)
+    c.setFillColor(NAVY)
+    c.rect(x, y + H - hh, W, hh, fill=1, stroke=0)
+    c.setFillColor(ORANGE)
+    c.restoreState()
+    c.saveState()
+    c.setFillColor(ORANGE)
+    c.rect(x, y + H - hh - 1.1 * mm, W, 1.1 * mm, fill=1, stroke=0)
+    tx = x + 4 * mm
+    if logo:
+        try:
+            c.drawImage(logo, x + 3 * mm, y + H - hh + 2 * mm, 9 * mm, 9 * mm, mask="auto", preserveAspectRatio=True)
+            tx = x + 13 * mm
+        except Exception:  # noqa: BLE001
+            pass
+    _fit(c, centre.get("centre_name") or "", tx, y + H - 6.2 * mm, W - (tx - x) - 3 * mm, 10, 6.5, True, color=white)
+    _fit(c, card.get("subtitle") or "", tx, y + H - 10.4 * mm, W - (tx - x) - 3 * mm, 6.5, 5, False,
+         color=HexColor("#fdba74"))
+    # body: QR left, text right
+    qs = 25 * mm
+    _qr(c, card["code"], x + 4 * mm, y + H - hh - 3 * mm - qs, qs)
+    bx = x + 4 * mm + qs + 4 * mm
+    bw = W - (bx - x) - 4 * mm
+    _fit(c, card["name"], bx, y + H - hh - 9 * mm, bw, 11, 6.5, True, color=NAVY)
+    _fit(c, card.get("formation") or "", bx, y + H - hh - 14 * mm, bw, 7.5, 5.5, False, color=GREY)
+    if card.get("extra"):
+        _fit(c, card["extra"], bx, y + H - hh - 18 * mm, bw, 7, 5.5, False, color=GREY)
+    # barcode strip
+    bh = 8.5 * mm
+    bc = code128.Code128(card["code"], barHeight=bh, barWidth=0.33 * mm, quiet=False, humanReadable=False)
+    bwid = bc.width
+    scale = min(1.0, (W - 10 * mm) / bwid)
+    c.saveState()
+    c.translate(x + (W - bwid * scale) / 2, y + 6 * mm)
+    c.scale(scale, 1)
+    c.setFillColor(HexColor("#000000"))
+    bc.drawOn(c, 0, 0)
+    c.restoreState()
+    c.setFillColor(NAVY)
+    c.setFont("Helvetica", 6.5)
+    c.drawCentredString(x + W / 2, y + 2.4 * mm, " ".join([card["code"][:3], card["code"][3:6], card["code"][6:]])
+                        if card["code"].isdigit() and len(card["code"]) == 9 else card["code"])
+    c.restoreState()
+
+
+def cards_pdf(centre, cards):
+    """cards: list of dicts(code, name, formation, extra, subtitle). 10 per A4 page, with crop marks."""
+    from reportlab.lib.units import mm
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    c.setTitle("Cartes")
+    W, H = 85.6 * mm, 54 * mm
+    gx, gy = 4 * mm, 2 * mm
+    left = (A4[0] - 2 * W - gx) / 2
+    top = A4[1] - (A4[1] - 5 * H - 4 * gy) / 2
+    logo = _logo_reader(centre)
+    for i, card in enumerate(cards):
+        k = i % 10
+        if i and k == 0:
+            c.showPage()
+        col, row = k % 2, k // 2
+        _draw_card(c, left + col * (W + gx), top - (row + 1) * H - row * gy, W, H, centre, logo, card)
+    c.save()
+    return buf.getvalue()

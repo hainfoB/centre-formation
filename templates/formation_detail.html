@@ -14,6 +14,7 @@
 <div class="tabs">{% for k, lab in (('inscrits','Inscrits'),('seances','Séances'),('assiduite','Assiduité & attestations'),('infos','Paramètres')) %}<a href="?tab={{ k }}" class="{{ 'on' if tab==k }}">{{ _(lab) }}</a>{% endfor %}</div>
 
 {% if tab == 'inscrits' %}
+<div class="row" style="margin-bottom:10px"><a class="btn sm o" href="{{ url_for('formation_cards', fid=fo.id) }}"><i class="bi bi-person-vcard"></i> {{ _("Cartes des stagiaires (PDF)") }}</a><a class="btn sm ghost" href="{{ url_for('identify_page') }}"><i class="bi bi-upc-scan"></i> {{ _("Pointage rapide") }}</a></div>
 <div class="card">{% if enrollments|length > 6 %}<div class="toolbar"><input type="search" data-filter="enrtbl" placeholder="{{ _("Filtrer les inscrits…") }}"></div>{% endif %}<div class="tw"><table id="enrtbl"><tr><th>{{ _("Stagiaire") }}</th><th>{{ _("Contact") }}</th><th>{{ _("Statut") }}</th>{% if not fo.is_free %}<th class="right">{{ _("Payé / dû") }}</th>{% endif %}<th>{{ _("Assiduité") }}</th><th></th></tr>
 {% for e in enrollments %}{% set st = e.student %}{% set r = by_enr.get(e.id) %}{% set m = money.get(e.id) %}<tr data-row>
 <td><a href="{{ url_for('student_detail', sid=st.id) }}"><b>{{ st.full_name }}</b></a><div class="xs muted">{{ _("inscrit le") }} {{ e.created_at|d }}{% if e.source %} · {{ e.source }}{% endif %}</div></td>

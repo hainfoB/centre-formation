@@ -1,0 +1,50 @@
+{% extends "base.html" %}{% block title %}{{ _("Pointage rapide") }}{% endblock %}{% block content %}
+<div class="head"><div><h1><i class="bi bi-upc-scan" style="color:var(--orange)"></i> {{ _("Pointage rapide") }}</h1>
+<div class="small muted">{{ _("Scannez la carte du stagiaire (lecteur code-barres, caméra ou saisie du numéro) pour l'identifier, pointer sa présence et voir ses paiements.") }}</div></div></div>
+<div class="card">
+<div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
+ <input id="code" autocomplete="off" autofocus inputmode="numeric" placeholder="{{ _('Scanner ou saisir le numéro de carte…') }}" style="flex:1;min-width:220px;font-size:20px;padding:12px 14px" aria-label="{{ _('Numéro de carte') }}">
+ <button id="go" type="button" class="btn o" style="min-height:48px"><i class="bi bi-search"></i> {{ _("Identifier") }}</button>
+ <button id="cam" type="button" class="btn ghost" style="min-height:48px"><i class="bi bi-camera"></i> {{ _("Caméra") }}</button>
+</div>
+<div class="row" style="gap:16px;margin-top:12px;flex-wrap:wrap;align-items:center">
+ <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="mark" checked> {{ _("Pointer la présence automatiquement") }}</label>
+ <span class="row" style="gap:6px"><button type="button" class="btn dir" data-dir="in">{{ _("➡ Entrée") }}</button><button type="button" class="btn ghost dir" data-dir="out">{{ _("⬅ Sortie") }}</button></span>
+ <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="beep" checked> {{ _("Bip sonore") }}</label>
+</div>
+<div id="reader" style="width:100%;max-width:420px;border-radius:12px;overflow:hidden;margin-top:12px;display:none"></div>
+</div>
+<div id="res" class="card" style="display:none"></div>
+<div class="card"><h3>{{ _("Derniers scans") }}</h3><div id="log" class="small"><span class="muted">{{ _("Aucun scan pour l'instant.") }}</span></div></div>
+<script src="{{ url_for('static', filename='vendor/html5-qrcode.min.js') }}"></script>
+<script>(function(){
+var dir='in',inp=document.getElementById('code'),res=document.getElementById('res'),logEl=document.getElementById('log'),first=true,busy=false,last={c:'',t:0};
+var T={net:{{ _('Erreur réseau')|tojson }},card:{{ _('Carte')|tojson }},paid:{{ _('Payé')|tojson }},rem:{{ _('Reste à payer')|tojson }},late:{{ _('Paiement en retard')|tojson }},file:{{ _('Fiche')|tojson }},pay:{{ _('Paiements')|tojson }},none:{{ _('Carte inconnue')|tojson }}};
+function esc(s){var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML}
+document.querySelectorAll('.dir').forEach(function(b){b.onclick=function(){dir=b.dataset.dir;document.querySelectorAll('.dir').forEach(function(x){x.classList.toggle('ghost',x!==b)});inp.focus()}});
+function beep(ok){if(!document.getElementById('beep').checked)return;try{var A=window.AudioContext||window.webkitAudioContext,c=new A(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=ok?880:220;g.gain.value=.12;o.start();o.stop(c.currentTime+(ok?.12:.35))}catch(e){}try{navigator.vibrate&&navigator.vibrate(ok?70:[60,40,60])}catch(e){}}
+function render(d){
+ var ok=d.ok,h='<div class="flash '+(ok?'success':'error')+'" style="font-size:17px;margin-bottom:12px"><span>'+(d.name?'<b>'+esc(d.name)+'</b> — ':'')+esc(d.message||'')+'</span></div>';
+ if(d.name){h+='<div class="small muted" style="margin-bottom:8px">'+T.card+' '+esc(d.code)+(d.phone?' · '+esc(d.phone):'')+(d.level?' · '+esc(d.level):'')+'</div>';
+  (d.forms||[]).forEach(function(f){h+='<div style="border-top:1px solid var(--line);padding:8px 0"><b>'+esc(f.title)+'</b>';
+   if(f.remaining!==undefined){h+='<div class="small">'+T.paid+' : '+esc(f.paid)+' · '+T.rem+' : <b style="color:'+(f.overdue?'var(--err)':'inherit')+'">'+esc(f.remaining)+'</b>'+(f.overdue?' ⚠ '+T.late:'')+' · <a href="'+esc(f.pay_url)+'">'+T.pay+'</a></div>'}h+='</div>'});
+  (d.marks||[]).forEach(function(m){h+='<div class="small" style="color:'+(m.ok===true?'var(--ok)':m.ok===false?'var(--err)':'var(--muted)')+'">'+(m.ok===true?'✔ ':m.ok===false?'✖ ':'• ')+esc(m.title)+' — '+esc(m.message)+'</div>'});
+  if(d.url)h+='<div style="margin-top:10px"><a class="btn sm" href="'+esc(d.url)+'"><i class="bi bi-person-vcard"></i> '+T.file+'</a></div>'}
+ res.innerHTML=h;res.style.display='block';
+}
+function addLog(d,code){var div=document.createElement('div');div.style.cssText='padding:6px 0;border-top:1px solid #e2e8f0;color:'+(d.ok?'#15803d':'#b91c1c');
+ var t=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});div.textContent=t+'  '+(dir==='out'?'⬅ ':'➡ ')+(d.name||code)+' — '+(d.message||'');
+ if(first){logEl.innerHTML='';first=false}logEl.insertBefore(div,logEl.firstChild);while(logEl.children.length>25)logEl.removeChild(logEl.lastChild)}
+function identify(code){code=(code||'').trim();if(!code||busy)return;var n=Date.now();if(code===last.c&&n-last.t<2500)return;last={c:code,t:n};busy=true;
+ fetch({{ url_for('identify_api')|tojson }},{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':{{ csrf_token()|tojson }}},body:JSON.stringify({code:code,dir:dir,mark:document.getElementById('mark').checked})})
+ .then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){busy=false;render(d);addLog(d,code);beep(d.ok)})
+ .catch(function(){busy=false;var d={ok:false,message:T.net};render(d);beep(false)}).then(function(){inp.value='';inp.focus()})}
+inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();identify(inp.value)}});
+document.getElementById('go').onclick=function(){identify(inp.value)};
+var q=null;document.getElementById('cam').onclick=function(){var r=document.getElementById('reader');
+ if(q){q.stop().catch(function(){});q=null;r.style.display='none';return}
+ r.style.display='block';q=new Html5Qrcode('reader',{formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.CODE_128]});
+ q.start({facingMode:'environment'},{fps:10,qrbox:{width:280,height:160}},function(t){identify(t)}).catch(function(e){r.style.display='none';q=null;render({ok:false,message:String(e)})})};
+document.addEventListener('click',function(e){if(!/BUTTON|A|INPUT|SELECT|LABEL/.test(e.target.tagName))inp.focus()});
+})();</script>
+{% endblock %}

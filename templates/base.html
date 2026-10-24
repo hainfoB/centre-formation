@@ -22,6 +22,7 @@
   <a href="{{ url_for('formations') }}" class="{{ 'on' if ep in ('formations','formation_detail','payments_view') }}"><i class="bi bi-journal-bookmark"></i> {{ _("Formations") }}</a>
   <a href="{{ url_for('students') }}" class="{{ 'on' if ep in ('students','student_detail') }}"><i class="bi bi-people"></i> {{ _("Stagiaires") }}</a>
   {% endif %}
+  {% if school %}<a href="{{ url_for('identify_page') }}" class="{{ 'on' if ep=='identify_page' }}"><i class="bi bi-upc-scan"></i> {{ _("Pointage rapide") }}</a>{% endif %}
   {% if school %}<a href="{{ url_for('my_seances') }}" class="{{ 'on' if ep in ('my_seances','seance_view') }}"><i class="bi bi-calendar-check"></i> {{ _("Séances & présences") }}</a>{% endif %}
   {% if current_user.can('manage') and school %}
   <div class="navsec">{{ _("Finances") }}</div>

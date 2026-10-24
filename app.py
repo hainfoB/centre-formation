@@ -176,8 +176,8 @@ def slugify(text, exclude_id=None):
     while True:
         with unscoped():
             q = Formation.query.filter_by(slug=slug)
-        if exclude_id:
-            q = q.filter(Formation.id != exclude_id)
+            if exclude_id:
+                q = q.filter(Formation.id != exclude_id)
             hit = q.first()
         if not hit:
             return slug
@@ -1368,7 +1368,7 @@ def student_detail(sid):
         row = enrollment_stats(e)
         data.append({"enr": e, "att": row, "money": enrollment_money(e), "cert": cert_eligible(e, row)})
     open_formations = Formation.query.filter(Formation.status.in_(("open", "running", "draft"))).all()
-    return render_template("student_detail.html", st=st, data=data, open_formations=open_formations,
+    return render_template("student_detail.html", st=st, card_no=card_code(st), data=data, open_formations=open_formations,
                            parent_url=f"{base_url()}/parent/{st.parent_token}", wa=wa_link, state=payment_state)
 
 
@@ -1700,6 +1700,10 @@ def export(fid, kind):
 def search():
     q = request.args.get("q", "").strip()
     res = {"students": [], "formations": [], "receipts": []}
+    if q.isdigit() and len(q) == 9:
+        _st, _e = resolve_card(q)
+        if _st:
+            return redirect(url_for("student_detail", sid=_st.id))
     if len(q) >= 2:
         like = f"%{q}%"
         res["students"] = Student.query.filter(or_(
@@ -1894,6 +1898,147 @@ def certificates_bulk(fid):
     db.session.commit()
     return send_file(io.BytesIO(certificates_pdf(Setting.all(), items)), mimetype="application/pdf",
                      download_name=f"attestations_{fo.slug[:40]}.pdf")
+
+
+# ── Student cards (QR + barcode) and fast identification ──────────────────────────────────────────
+def card_code(st):
+    """9 digits: school (3) + student (6). Printed as QR code and Code128 barcode on the card."""
+    return f"{(st.school_id or 0):03d}{st.id:06d}"
+
+
+def resolve_card(raw):
+    """Student for a scanned/typed value: card code, old ticket (CF1:…/token), phone, email or exact name."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None, None
+    up = raw.upper()
+    if up.startswith("HC:"):
+        raw = raw[3:].strip()
+    digits = re.sub(r"\s+", "", raw)
+    if digits.isdigit() and len(digits) == 9:
+        st = db.session.get(Student, int(digits[3:]))
+        return (st, None) if st and card_code(st) == digits else (None, None)
+    tok = raw[4:] if up.startswith("CF1:") else raw.rsplit("/", 1)[-1]
+    enr = Enrollment.query.filter_by(token=tok).first() if tok else None
+    if enr:
+        return enr.student, enr
+    if "@" in raw:
+        st = Student.query.filter(func.lower(Student.email) == raw.lower()).first()
+        return (st, None) if st else (None, None)
+    norm = Student.norm_phone(raw)
+    if len(norm) >= 8:
+        st = next((x for x in Student.query.filter(Student.phone.isnot(None)).all()
+                   if Student.norm_phone(x.phone) == norm), None)
+        return (st, None) if st else (None, None)
+    return None, None
+
+
+def student_card_item(st, fo=None):
+    fos = [fo] if fo else [e.formation for e in st.enrollments.filter_by(status="confirmed").all()]
+    titles = " · ".join(dict.fromkeys(f.title for f in fos))
+    return {"code": card_code(st), "name": st.full_name, "formation": titles[:120],
+            "extra": (st.phone or st.parent_phone or ""), "subtitle": _("Carte de stagiaire")}
+
+
+def _cards_response(items, name):
+    from pdfs import cards_pdf
+    return send_file(io.BytesIO(cards_pdf(Setting.all(), items)), mimetype="application/pdf",
+                     download_name=name)
+
+
+@app.route("/stagiaires/<int:sid>/carte.pdf")
+@role_required("manage")
+def student_card(sid):
+    st = Student.query.get_or_404(sid)
+    return _cards_response([student_card_item(st)], f"carte_{st.id}.pdf")
+
+
+@app.route("/formations/<int:fid>/cartes.pdf")
+@role_required("manage")
+def formation_cards(fid):
+    fo = Formation.query.get_or_404(fid)
+    sts = [e.student for e in fo.enrollments.filter_by(status="confirmed").all()]
+    if not sts:
+        flash(_("Aucun stagiaire confirmé dans cette formation."), "error")
+        return redirect(url_for("formation_detail", fid=fo.id))
+    sts.sort(key=lambda x: x.full_name)
+    return _cards_response([student_card_item(x, fo) for x in sts], f"cartes_{fo.slug[:40]}.pdf")
+
+
+@app.route("/stagiaires/cartes.pdf")
+@role_required("manage")
+def students_cards():
+    ids = [to_int(x, 0, 10 ** 9) for x in request.args.get("ids", "").split(",") if x.strip()]
+    q = Student.query.filter(Student.id.in_(ids)) if ids else Student.query
+    sts = sorted(q.all(), key=lambda x: x.full_name)[:600]
+    if not sts:
+        flash(_("Aucun stagiaire."), "error")
+        return redirect(url_for("students"))
+    return _cards_response([student_card_item(x) for x in sts], "cartes_stagiaires.pdf")
+
+
+@app.route("/pointage")
+@role_required("attendance")
+def identify_page():
+    return render_template("identify.html", manage=current_user.can("manage"))
+
+
+@app.route("/api/identifier", methods=["POST"])
+@role_required("attendance")
+def identify_api():
+    data = request.get_json(silent=True) or {}
+    st, enr0 = resolve_card(data.get("code"))
+    if not st:
+        return jsonify(ok=False, message=_("Carte inconnue"), name="")
+    manage = current_user.can("manage")
+    direction = "out" if data.get("dir") == "out" else "in"
+    mark = bool(data.get("mark"))
+    out = {"ok": True, "name": st.full_name, "code": card_code(st), "id": st.id,
+           "phone": st.phone or st.parent_phone or "", "level": st.level or "", "forms": [], "marks": []}
+    if manage:
+        out["url"] = url_for("student_detail", sid=st.id)
+    day = today()
+    due_total = over_total = 0
+    for e in st.enrollments.order_by(None).all():
+        fo = e.formation
+        if e.status != "confirmed":
+            continue
+        if current_user.role == "formateur" and fo.trainer_id != current_user.id:
+            continue
+        item = {"title": fo.title, "status": e.status}
+        if manage:
+            m = enrollment_money(e)
+            item.update(paid=fmt_da(m["paid"]), remaining=fmt_da(m["remaining"]), overdue=m["overdue"] > 0,
+                        pay_url=url_for("payments_view", fid=fo.id))
+            due_total += m["remaining"]
+            over_total += m["overdue"]
+        out["forms"].append(item)
+        sc = Seance.query.filter_by(formation_id=fo.id, day=day).first()
+        if sc:
+            att = Attendance.query.filter_by(seance_id=sc.id, enrollment_id=e.id).first()
+            if mark:
+                ok, key, t = do_checkin(sc, e, direction, "card")
+                out["marks"].append({"title": fo.title, "ok": ok, "message": scan_msg(key, t)})
+            else:
+                state = ""
+                if att and att.checkin_at:
+                    state = (att.checkin_at + timedelta(hours=UTC_OFFSET)).strftime("%H:%M")
+                out["marks"].append({"title": fo.title, "ok": None, "message":
+                                     _("Déjà pointé à {t}", t=state) if state else _("Séance aujourd'hui, pas encore pointé")})
+    if manage:
+        out["remaining"] = fmt_da(due_total)
+        out["overdue"] = over_total > 0
+        out["overdue_amount"] = fmt_da(over_total)
+    if not out["forms"]:
+        out.update(ok=False, message=_("Aucune inscription confirmée"))
+    elif mark and out["marks"]:
+        out["ok"] = any(m["ok"] for m in out["marks"])
+        out["message"] = out["marks"][0]["message"]
+    elif mark:
+        out.update(ok=False, message=_("Pas de séance aujourd'hui"))
+    else:
+        out["message"] = _("Stagiaire identifié(e)")
+    return jsonify(out)
 
 
 # ── Full backup (admin) ───────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ a.title }}{% endblock %}{% block public %}{% include "_learn_head.html" %}
+<h1 style="font-size:22px;color:var(--navy);margin:10px 0 4px"><i class="bi bi-chat-dots" style="color:#0369a1"></i> {{ a.title }}</h1>
+{% if a.body %}<div class="card small">{{ a.body|md }}</div>{% endif %}
+{% if hidden %}<div class="card" style="background:#fff7ed"><i class="bi bi-eye-slash"></i> {{ _("Publiez votre réponse pour voir celles des autres participants.") }}</div>{% endif %}
+{% set action = request.path %}{% set can_post = not preview %}{% set csrf = true %}{% set staff = false %}{% include "_forum.html" %}
+{% endblock %}

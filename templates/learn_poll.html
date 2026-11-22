@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ a.title }}{% endblock %}{% block public %}{% include "_learn_head.html" %}
+<h1 style="font-size:22px;color:var(--navy);margin:10px 0 4px"><i class="bi bi-bar-chart-steps" style="color:#be185d"></i> {{ a.title }}</h1>
+{% if a.body %}<div class="small" style="margin-bottom:10px">{{ a.body|md }}</div>{% endif %}
+{% if o.get('anonymous') %}<p class="xs muted"><i class="bi bi-incognito"></i> {{ _("Vos réponses sont anonymes.") }}</p>{% endif %}
+{% if mine %}<div class="card" style="background:#dcfce7;color:#14532d"><i class="bi bi-check-circle-fill"></i> {{ _("Merci, votre réponse est enregistrée. Vous pouvez la modifier ci-dessous.") }}</div>{% endif %}
+<form method="post">{% if not preview %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+{% for q in o.get('questions', []) %}{% set cur = (mine or {}).get(loop.index0|string) %}<fieldset class="card" style="border:1px solid var(--line)"><legend class="small"><b>{{ loop.index }}. {{ q.text }}</b></legend>
+{% if q.type == 'scale' %}<div class="row scale" style="gap:6px">{% set qi = loop.index0 %}{% for k in range(1, 6) %}<label class="sc"><input type="radio" name="q{{ qi }}" value="{{ k }}" {{ 'checked' if cur == k|string }}><span>{{ k }}</span></label>{% endfor %}</div><div class="row xs muted" style="justify-content:space-between;margin-top:4px"><span>{{ _("Pas du tout satisfait") }}</span><span>{{ _("Très satisfait") }}</span></div>
+{% elif q.type in ('choice','multi') %}{% set qi = loop.index0 %}{% for op in q.options %}<label class="opt"><input type="{{ 'radio' if q.type=='choice' else 'checkbox' }}" name="q{{ qi }}" value="{{ op }}" {{ 'checked' if (cur == op) or (cur is iterable and cur is not string and op in cur) }}> <span>{{ op }}</span></label>{% endfor %}
+{% else %}<textarea name="q{{ loop.index0 }}" rows="3">{{ cur or '' }}</textarea>{% endif %}</fieldset>{% endfor %}
+<button class="btn o" style="width:100%;padding:13px" {{ 'disabled' if preview }}><i class="bi bi-send"></i> {{ _("Envoyer mes réponses") if not mine else _("Mettre à jour mes réponses") }}</button></form>
+{% if res %}<h2 style="font-size:18px;margin:18px 0 8px">{{ _("Résultats") }} ({{ n }})</h2>{% include "_poll_results.html" %}{% endif %}
+<style>.scale .sc{flex:1}.sc input{position:absolute;opacity:0}.sc span{display:grid;place-items:center;height:46px;border:1.5px solid var(--line);border-radius:12px;font-weight:800;font-size:17px;cursor:pointer}.sc input:checked+span{background:var(--orange);border-color:var(--orange);color:#fff}.sc input:focus-visible+span{outline:3px solid var(--navy)}
+.opt{display:flex;gap:10px;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;margin:6px 0}.opt:has(input:checked){border-color:var(--orange);background:#fff7ed}</style>
+{% endblock %}

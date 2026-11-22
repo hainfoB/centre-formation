@@ -229,7 +229,7 @@ LABELS = Labels({
     "admin": "Administrateur", "secretaire": "Secrétariat", "formateur": "Formateur", "rh": "Responsable RH",
     "none": "Pas d'envoi automatique", "weekly": "Chaque lundi (semaine écoulée)", "monthly": "Le 1er du mois (mois écoulé)", "end": "À la fin de chaque formation",
     "group": "Groupe", "company": "Entreprise / structure",
-    "k_page": "Page", "k_file": "Fichier", "k_video": "Vidéo", "k_url": "Lien externe", "k_label": "Étiquette", "k_quiz": "Quiz", "k_assign": "Devoir",
+    "k_page": "Page", "k_file": "Fichier", "k_video": "Vidéo", "k_url": "Lien externe", "k_label": "Étiquette", "k_quiz": "Quiz", "k_assign": "Devoir", "k_forum": "Forum", "k_poll": "Sondage",
     "c_auto": "Terminée à la réussite / à la remise",
     "c_view": "Terminée à la consultation", "c_manual": "Le stagiaire coche « J'ai terminé »", "c_none": "Pas de suivi",
     "ticket": "QR ticket", "room": "QR salle", "code": "Code", "manual": "Manuel",
@@ -2803,6 +2803,7 @@ def start_scheduler():
     sch.add_job(run_payment_reminders, "interval", minutes=60, id="pay", next_run_time=datetime.now() + timedelta(minutes=2))
     sch.add_job(run_seance_reminders, "interval", minutes=60, id="seance", next_run_time=datetime.now() + timedelta(minutes=3))
     sch.add_job(globals()["run_company_reports"], "interval", minutes=60, id="rh", next_run_time=datetime.now() + timedelta(minutes=4))
+    sch.add_job(globals()["run_due_reminders"], "interval", minutes=60, id="due", next_run_time=datetime.now() + timedelta(minutes=5))
     sch.start()
 
 
@@ -2813,6 +2814,8 @@ import elearning  # noqa: E402  (online courses)
 elearning.register(app, globals())
 import assess  # noqa: E402  (quiz, assignments, gradebook)
 assess.register(app, globals())
+import community  # noqa: E402  (announcements, forums, polls, calendar)
+community.register(app, globals())
 
 if os.environ.get("SEED_PRO_DEMO"):      # creates the demo school once (never deletes anything)
     with app.app_context():
@@ -2826,6 +2829,9 @@ if os.environ.get("SEED_PRO_DEMO"):      # creates the demo school once (never d
             import seed_assess
             if seed_assess.add():
                 print("📝 Quiz et devoirs de démonstration créés.")
+            import seed_community
+            if seed_community.add():
+                print("💬 Annonces, forums et sondages de démonstration créés.")
             _target = os.environ.get("SUPERADMIN_SCHOOL")        # slug: the super admin works inside this school
             _email = (os.environ.get("SUPERADMIN_EMAIL") or "").strip().lower()
             if _target and _email:

@@ -442,7 +442,7 @@ class PlatformSetting(db.Model):
 
 
 # ── E-learning (type Moodle) ──────────────────────────────────────────────────────────────────────
-ACTIVITY_KINDS = ("page", "file", "video", "url", "label", "quiz", "assign")
+ACTIVITY_KINDS = ("page", "file", "video", "url", "label", "quiz", "assign", "forum", "poll")
 QTYPES = ("mcq", "multi", "tf", "short", "numeric", "match")
 
 
@@ -580,3 +580,35 @@ class Submission(Tenant, db.Model):
     graded_by = db.Column(db.String(120), nullable=True)
     file = db.relationship("StoredFile")
     __table_args__ = (db.UniqueConstraint("activity_id", "enrollment_id", name="uq_sub"),)
+
+
+class Announcement(Tenant, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text, nullable=True)
+    author = db.Column(db.String(120), nullable=True)
+    pinned = db.Column(db.Boolean, default=False)
+    emailed = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ForumPost(Tenant, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activity.id"), nullable=False, index=True)
+    parent_id = db.Column(db.Integer, db.ForeignKey("forum_post.id"), nullable=True, index=True)
+    enrollment_id = db.Column(db.Integer, db.ForeignKey("enrollment.id"), nullable=True)   # learner author
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)               # staff author
+    author = db.Column(db.String(120), nullable=True)
+    subject = db.Column(db.String(200), nullable=True)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PollResponse(Tenant, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activity.id"), nullable=False, index=True)
+    enrollment_id = db.Column(db.Integer, db.ForeignKey("enrollment.id"), nullable=False, index=True)
+    answers = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("activity_id", "enrollment_id", name="uq_poll"),)

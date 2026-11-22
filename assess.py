@@ -363,6 +363,8 @@ def register(app, A):  # noqa: C901
                 return redirect(request.url)
             s.feedback = (f.get("feedback") or "").strip() or None
             s.graded_at, s.graded_by = datetime.utcnow(), current_user.name
+            if s.grade is not None and A.get("notify_graded"):
+                A["notify_graded"](s, a)
             db.session.commit()
             flash(_("Note enregistrée."), "success")
             return redirect(url_for("el_assign", cid=c.id, aid=a.id) + f"#sub{s.id}")

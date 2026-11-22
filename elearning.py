@@ -290,7 +290,7 @@ def register(app, A):  # noqa: C901
             a.completion = f.get("completion") if f.get("completion") in ("view", "manual", "none", "auto") else "view"
             if a.kind == "label":
                 a.completion = "none"
-            if a.kind in ("quiz", "assign") and A.get("save_activity_opts"):
+            if a.kind in ("quiz", "assign", "forum", "poll") and A.get("save_activity_opts"):
                 A["save_activity_opts"](a, f)
             a.available_from = A["parse_date"](f.get("available_from"))
             a.visible = not f.get("hidden")
@@ -422,6 +422,9 @@ def register(app, A):  # noqa: C901
             return redirect(url_for("learn_course", token=token, cid=c.id))
         if a.kind in ("quiz", "assign"):
             return redirect(url_for("learn_eval", token=token, aid=a.id, apercu=1 if prev else None))
+        if a.kind in ("forum", "poll"):
+            return redirect(url_for("learn_forum" if a.kind == "forum" else "learn_poll", token=token, aid=a.id,
+                                    apercu=1 if prev else None))
         if not prev:
             if request.method == "POST":
                 mark(enr, a, request.form.get("done") == "1")

@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ _("Mon calendrier") }}{% endblock %}{% block public %}
+<a class="xs" href="{{ url_for('ticket', token=enr.token) }}">← {{ _("Mon espace") }}</a>
+<h1 style="color:var(--navy);font-size:24px;margin:10px 0 4px">{{ _("Mon calendrier") }}</h1><p class="small muted" style="margin:0 0 10px">{{ enr.formation.title }}</p>
+<a class="btn o" href="{{ url_for('learn_ics', token=enr.token) }}"><i class="bi bi-calendar-plus"></i> {{ _("Ajouter à l'agenda de mon téléphone") }}</a>
+<p class="xs muted">{{ _("Le fichier .ics s'ouvre dans Google Agenda, Outlook ou l'agenda de l'iPhone.") }}</p>
+{% set ns = namespace(m=none) %}{% for e in ev %}{% if e.day.month != ns.m %}{% set ns.m = e.day.month %}<h3 style="margin:16px 0 6px;font-size:14px;color:var(--muted)">{{ e.day.strftime('%m/%Y') }}</h3>{% endif %}
+<{{ 'a' if e.url else 'div' }} class="lev k-{{ e.kind }} {{ 'past' if e.day < today_ }}" {% if e.url %}href="{{ e.url }}"{% endif %}><div class="d"><b>{{ e.day.day }}</b><span>{{ e.day.strftime('%m') }}</span></div>
+<div class="grow"><b>{% if e.kind=='due' %}📌 {{ _("À rendre") }} : {% elif e.kind=='open' %}🔓 {% endif %}{{ e.title }}</b><div class="xs muted">{{ e.time }}{% if e.sub %} · {{ e.sub }}{% endif %}</div></div></{{ 'a' if e.url else 'div' }}>
+{% else %}<div class="card muted center">{{ _("Rien de prévu.") }}</div>{% endfor %}
+<style>.lev{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:6px;text-decoration:none;color:inherit}.lev.past{opacity:.5}
+.lev .d{width:46px;height:46px;border-radius:10px;background:var(--navy);color:#fff;display:grid;place-items:center;line-height:1;flex:none}.lev .d b{font-size:17px}.lev .d span{font-size:10px;opacity:.8}.lev.k-due .d{background:#dc2626}.lev.k-open .d{background:#16a34a}</style>
+{% endblock %}

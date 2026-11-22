@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}{{ a.title }}{% endblock %}{% block content %}
+<div class="head"><div><div class="xs muted"><a href="{{ url_for('el_course', cid=c.id) }}">{{ c.title }}</a></div><h1><i class="bi bi-bar-chart-steps" style="color:var(--orange)"></i> {{ a.title }}</h1><div class="small muted">{{ n }} / {{ total }} {{ _("réponse(s)") }}{% if o.get('anonymous') %} · {{ _("anonyme") }}{% endif %}</div></div>
+<div class="row" style="gap:6px"><a class="btn sm" href="{{ url_for('el_poll', cid=c.id, aid=a.id, format='xlsx') }}"><i class="bi bi-file-earmark-excel"></i> Excel</a><a class="btn sm ghost" href="{{ url_for('el_activity', cid=c.id, aid=a.id) }}"><i class="bi bi-gear"></i> {{ _("Réglages") }}</a></div></div>
+<div class="kpi o" style="margin-bottom:14px;max-width:260px"><span>{{ _("Taux de réponse") }}</span><b>{{ (n * 100 / total)|round|int if total else 0 }} %</b></div>
+{% include "_poll_results.html" %}
+{% endblock %}

@@ -3,7 +3,7 @@
 <div class="kpi"><span>{{ _("Salariés suivis") }}</span><b>{{ tot.trained }}<small class="muted" style="font-size:13px"> / {{ tot.employees }}</small></b></div>
 <div class="kpi {{ 'o' if tot.avg < 80 }}" style="{{ 'border-top-color:#16a34a' if tot.avg >= 80 }}"><span>{{ _("Assiduité moyenne") }}</span><b>{{ tot.avg }} %</b></div>
 <div class="kpi"><span>{{ _("Absences / retards") }}</span><b>{{ tot.absent }} <small class="muted" style="font-size:13px">/ {{ tot.late }}</small></b></div>
-<div class="kpi"><span>{{ _("Heures suivies") }}</span><b>{{ tot.hours }} h</b></div></div>
+<div class="kpi"><span>{{ _("Heures suivies") }}</span><b>{{ tot.hours }} {{ _("h") }}</b></div></div>
 {% for b in blocks %}<div class="card"><div class="row" style="justify-content:space-between;gap:8px"><div><h2 style="margin:0">{{ b.title }}</h2><div class="xs muted">{{ b.meta }}</div></div>
 {% if detail_tpl %}<a class="btn sm ghost" href="{{ detail_tpl|replace('/formation/0', '/formation/' ~ b.formation.id) }}"><i class="bi bi-grid-3x3"></i> {{ _("Émargement détaillé") }}</a>{% endif %}</div>
 {% if b.seances %}<div class="tw" style="margin-top:10px"><table><thead><tr><th>{{ _("Salarié") }}</th><th class="center">{{ _("Présent") }}</th><th class="center">{{ _("Retard") }}</th><th class="center">{{ _("Absent") }}</th><th class="center">{{ _("Excusé") }}</th><th class="center">{{ _("Heures") }}</th><th style="min-width:130px">{{ _("Assiduité") }}</th></tr></thead><tbody>

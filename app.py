@@ -55,7 +55,13 @@ db.init_app(app)
 csrf = CSRFProtect(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
-login_manager.login_message = "Veuillez vous connecter."
+login_manager.login_message = None
+
+
+@login_manager.unauthorized_handler
+def _unauthorized():
+    flash(_("Veuillez vous connecter."), "error")
+    return redirect(url_for("login", next=request.full_path if request.method == "GET" else None))
 
 
 @login_manager.user_loader
@@ -2777,12 +2783,12 @@ def health():
 
 @app.errorhandler(403)
 def forbidden(_e):
-    return render_template("message.html", title="Accès refusé", text="Vous n'avez pas accès à cette page."), 403
+    return render_template("message.html", title=_("Accès refusé"), text=_("Vous n'avez pas accès à cette page.")), 403
 
 
 @app.errorhandler(404)
 def not_found(_e):
-    return render_template("message.html", title="Page introuvable", text="Ce lien n'existe pas ou n'est plus valide."), 404
+    return render_template("message.html", title=_("Page introuvable"), text=_("Ce lien n'existe pas ou n'est plus valide.")), 404
 
 
 # ── Background jobs (one gunicorn worker, see Procfile) ───────────────────────────────────────────

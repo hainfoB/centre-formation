@@ -22,7 +22,7 @@
 <div class="fields" style="margin-top:8px">
 <div><label>{{ _("Serveur") }}</label><input name="host" id="h" value="{{ raw.host or '' }}" placeholder="mail.mon-ecole.dz"></div>
 <div class="row" style="gap:8px"><div style="flex:1"><label>{{ _("Port") }}</label><input name="port" id="pt" value="{{ raw.port or '587' }}"></div>
-<div style="flex:1"><label>{{ _("Sécurité") }}</label><select name="security" id="sec">{% for k, n in (('starttls','STARTTLS'),('ssl','SSL/TLS'),('none','Aucune')) %}<option value="{{ k }}" {{ 'selected' if (raw.security or 'starttls')==k }}>{{ n }}</option>{% endfor %}</select></div></div>
+<div style="flex:1"><label>{{ _("Sécurité") }}</label><select name="security" id="sec">{% for k, n in (('starttls','STARTTLS'),('ssl','SSL/TLS'),('none',_('Aucune'))) %}<option value="{{ k }}" {{ 'selected' if (raw.security or 'starttls')==k }}>{{ n }}</option>{% endfor %}</select></div></div>
 <div><label>{{ _("Identifiant") }}</label><input name="user" value="{{ raw.user or '' }}" autocomplete="off" placeholder="contact@mon-ecole.dz"></div>
 <div><label>{{ _("Mot de passe") }}</label><input type="password" name="password" autocomplete="new-password" placeholder="{{ '•••••••• ' ~ _('(enregistré — laisser vide pour garder)') if has.password else '' }}"></div></div>
 <p class="xs muted">{{ _("Gmail et Outlook demandent un « mot de passe d'application » (compte avec validation en deux étapes), pas le mot de passe habituel.") }}</p></div>

@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}{{ _("Banque de questions") }}{% endblock %}{% block content %}
+<div class="head"><div><div class="xs muted"><a href="{{ url_for('el_course', cid=c.id) }}">{{ c.title }}</a></div><h1>{{ _("Banque de questions") }}</h1><div class="small muted">{{ qs|length }} {{ _("question(s)") }} · {{ _("réutilisables dans tous les quiz du cours") }}</div></div></div>
+<div class="card"><div class="row" style="gap:6px;flex-wrap:wrap"><span class="small"><b>{{ _("Nouvelle question") }} :</b></span>{% for t in qtypes %}<a class="btn sm ghost" href="{{ url_for('el_question', cid=c.id, type=t) }}"><i class="bi bi-plus"></i> {{ _(QLAB[t]) }}</a>{% endfor %}</div></div>
+<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ _("Questions") }}</h2><input data-filter="bk" placeholder="{{ _('Filtrer…') }}" style="max-width:240px"></div>
+<div class="tw" style="margin-top:8px"><table id="bk"><thead><tr><th>{{ _("Énoncé") }}</th><th>{{ _("Type") }}</th><th>{{ _("Catégorie") }}</th><th class="center">{{ _("Points") }}</th><th></th></tr></thead><tbody>
+{% for q in qs %}<tr data-row><td><a href="{{ url_for('el_question', cid=c.id, qid=q.id) }}">{{ q.text[:120] }}</a></td><td class="small nowrap">{{ _(QLAB[q.qtype]) }}</td><td class="small">{{ q.category or '—' }}</td><td class="center">{{ q.points|num }}</td>
+<td><form method="post" onsubmit="return confirm('{{ _('Supprimer cette question ?') }}')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="delete"><input type="hidden" name="qid" value="{{ q.id }}"><button class="btn sm ghost" aria-label="{{ _('Supprimer') }}"><i class="bi bi-trash"></i></button></form></td></tr>
+{% else %}<tr><td colspan="5" class="empty"><i class="bi bi-question-square"></i>{{ _("Aucune question. Créez-en une ou importez un fichier GIFT (format Moodle).") }}</td></tr>{% endfor %}</tbody></table></div></div>
+<details class="card"><summary><b><i class="bi bi-upload"></i> {{ _("Importer des questions (format GIFT de Moodle)") }}</b></summary>
+<form method="post" enctype="multipart/form-data" style="margin-top:10px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="import">
+<div class="fields"><div><label>{{ _("Fichier .gift / .txt") }}</label><input type="file" name="file" accept=".gift,.txt"></div><div><label>{{ _("Catégorie (facultatif)") }}</label><input name="category" list="cats">{% if cats %}<datalist id="cats">{% for x in cats if x %}<option>{{ x }}</option>{% endfor %}</datalist>{% endif %}</div>
+<div class="full"><label>{{ _("… ou collez le texte") }}</label><textarea name="gift" rows="8" style="font-family:monospace;font-size:13px" {% raw %}placeholder="::Q1:: Quel procédé utilise une électrode non fusible ? {=TIG ~MIG ~Électrode enrobée}
+
+La fissure est toujours un défaut rédhibitoire. {T}
+
+Combien font 3,5 × 2 ? {#7:0.01}
+
+Associez : {=111 -> Électrode enrobée =141 -> TIG =121 -> Arc submergé}"{% endraw %}></textarea></div></div>
+<button class="btn o" style="margin-top:8px">{{ _("Importer") }}</button></form></details>
+{% endblock %}

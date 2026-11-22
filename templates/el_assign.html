@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}{{ a.title }}{% endblock %}{% block content %}
+<div class="head"><div><div class="xs muted"><a href="{{ url_for('el_course', cid=c.id) }}">{{ c.title }}</a></div><h1><i class="bi bi-clipboard-check" style="color:var(--orange)"></i> {{ a.title }}</h1>
+<div class="small muted">{% if o.get('due') %}{{ _("Date limite") }} : {{ o.due.replace('T', ' ') }} · {% endif %}{{ _("noté sur") }} {{ mx|int }}</div></div><a class="btn sm ghost" href="{{ url_for('el_activity', cid=c.id, aid=a.id) }}"><i class="bi bi-gear"></i> {{ _("Réglages") }}</a></div>
+{% set rem = subs.values()|selectattr('submitted_at')|list %}
+<div class="grid g4" style="margin-bottom:14px"><div class="kpi"><span>{{ _("Remis") }}</span><b>{{ rem|length }} / {{ enrs|length }}</b></div><div class="kpi o"><span>{{ _("À corriger") }}</span><b>{{ rem|selectattr('grade','none')|list|length }}</b></div>
+<div class="kpi" style="border-top-color:#16a34a"><span>{{ _("Corrigés") }}</span><b>{{ rem|rejectattr('grade','none')|list|length }}</b></div><div class="kpi"><span>{{ _("En retard") }}</span><b>{{ rem|selectattr('late')|list|length }}</b></div></div>
+{% for e in enrs %}{% set s = subs.get(e.id) %}<div class="card" id="sub{{ s.id if s else '' }}"><div class="row" style="justify-content:space-between;gap:8px"><div><b>{{ e.student.full_name }}</b>{% if e.student.job_title %} <span class="xs muted">· {{ e.student.job_title }}</span>{% endif %}
+<div class="xs muted">{% if s and s.submitted_at %}{{ _("Remis le") }} {{ s.submitted_at.strftime('%d/%m/%Y %H:%M') }} UTC{% if s.late %} · <b style="color:#dc2626">{{ _("en retard") }}</b>{% endif %}{% else %}{{ _("Pas encore remis") }}{% endif %}</div></div>
+{% if s and s.grade is not none %}<span class="badge b-paid" style="font-size:14px">{{ s.grade|num }} / {{ mx|int }}</span>{% elif s and s.submitted_at %}<span class="badge b-due">{{ _("À corriger") }}</span>{% endif %}</div>
+{% if s and s.submitted_at %}{% if s.text %}<div class="small" style="background:#f8fafc;border-radius:10px;padding:10px;margin-top:8px;white-space:pre-wrap">{{ s.text }}</div>{% endif %}
+{% if s.file %}<a class="btn sm" style="margin-top:8px" href="{{ url_for('el_file', fid=s.file_id) }}"><i class="bi bi-paperclip"></i> {{ s.file.name }}</a>{% endif %}
+<form method="post" class="row" style="gap:8px;margin-top:10px;align-items:end;flex-wrap:wrap"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="sid" value="{{ s.id }}">
+<div><label class="xs">{{ _("Note") }} / {{ mx|int }}</label><input name="grade" value="{{ s.grade if s.grade is not none else '' }}" style="width:90px"></div>
+<div style="flex:1;min-width:220px"><label class="xs">{{ _("Commentaire au stagiaire") }}</label><input name="feedback" value="{{ s.feedback or '' }}"></div><button class="btn sm o">{{ _("Enregistrer") }}</button></form>{% endif %}</div>{% endfor %}
+{% endblock %}

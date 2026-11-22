@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ a.title }}{% endblock %}{% block public %}{% include "_learn_head.html" %}
+<article class="card" style="margin-top:10px"><div class="xs" style="color:#6d28d9;font-weight:700"><i class="bi bi-clipboard-check"></i> {{ _("Devoir") }}</div><h1 style="font-size:24px;color:var(--navy);margin:6px 0 10px">{{ a.title }}</h1>
+<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">{% if due %}<span class="badge {{ 'b-overdue' if closed else 'b-due' }}"><i class="bi bi-calendar-event"></i> {{ _("À rendre avant le") }} {{ due.strftime('%d/%m/%Y %H:%M') }}</span>{% endif %}<span class="badge">{{ _("noté sur") }} {{ mx|int }}</span>
+{% if s and s.submitted_at %}<span class="badge b-paid"><i class="bi bi-check2"></i> {{ _("Remis le") }} {{ s.submitted_at.strftime('%d/%m/%Y') }}</span>{% endif %}</div>
+<div class="mdb">{{ a.body|md }}</div>
+{% if s and s.grade is not none %}<div style="background:#dcfce7;border-radius:12px;padding:14px;margin-top:12px"><div class="xs" style="color:#14532d">{{ _("Votre note") }}</div><div style="font-size:30px;font-weight:800;color:#14532d">{{ s.grade|num }} / {{ mx|int }}</div>{% if s.feedback %}<div class="small" style="margin-top:6px"><b>{{ _("Commentaire du formateur") }} :</b> {{ s.feedback }}</div>{% endif %}</div>
+{% elif closed and not (s and s.submitted_at) %}<p class="small" style="color:#dc2626">{{ _("La date limite est dépassée.") }}</p>
+{% else %}<form method="post" enctype="multipart/form-data" style="margin-top:14px">{% if not preview %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+{% if o.get('mode','both') in ('text','both') %}<label>{{ _("Votre réponse") }}</label><textarea name="text" rows="7">{{ s.text or '' if s }}</textarea>{% endif %}
+{% if o.get('mode','both') in ('file','both') %}<label style="margin-top:8px">{{ _("Fichier (20 Mo max.)") }}</label><input type="file" name="file">{% if s and s.file %}<div class="xs muted">{{ _("Déjà remis") }} : {{ s.file.name }}</div>{% endif %}{% endif %}
+<button class="btn o" style="margin-top:12px" {{ 'disabled' if preview }}><i class="bi bi-send"></i> {{ _("Remettre le devoir") if not (s and s.submitted_at) else _("Remplacer ma remise") }}</button></form>{% endif %}</article>
+<style>.mdb{font-size:15px;line-height:1.6}</style>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ a.title }}{% endblock %}{% block public %}
+<div class="qbar"><b>{{ a.title }}</b><span class="grow"></span>{% if remaining is not none %}<span id="timer" class="badge" style="font-size:15px"><i class="bi bi-stopwatch"></i> <span id="tt">--:--</span></span>{% endif %}</div>
+<form method="post" id="qf"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% for q in qs %}{% set d = q.d() %}{% set order = lay.o.get(q.id|string, []) %}<fieldset class="card qq"><legend class="xs muted">{{ _("Question") }} {{ loop.index }} / {{ qs|length }} · {{ q.points|num }} pt</legend>
+<div class="qt">{{ q.text|md }}</div>
+{% if q.qtype in ('mcq','multi') %}{% if q.qtype=='multi' %}<div class="xs muted">{{ _("Plusieurs réponses possibles.") }}</div>{% endif %}{% for i in order %}{% set op = d.options[i] %}<label class="opt"><input type="{{ 'radio' if q.qtype=='mcq' else 'checkbox' }}" name="q{{ q.id }}" value="{{ i }}"> <span>{{ op.t }}</span></label>{% endfor %}
+{% elif q.qtype == 'tf' %}<label class="opt"><input type="radio" name="q{{ q.id }}" value="1"> <span>{{ _("Vrai") }}</span></label><label class="opt"><input type="radio" name="q{{ q.id }}" value="0"> <span>{{ _("Faux") }}</span></label>
+{% elif q.qtype == 'short' %}<input name="q{{ q.id }}" autocomplete="off" placeholder="{{ _('Votre réponse') }}">
+{% elif q.qtype == 'numeric' %}<input name="q{{ q.id }}" inputmode="decimal" autocomplete="off" placeholder="{{ _('Nombre') }}">
+{% elif q.qtype == 'match' %}{% set rights = d.pairs|map(attribute=1)|list %}{% for p in d.pairs %}<div class="row" style="gap:8px;margin:6px 0;flex-wrap:wrap"><span style="flex:1;min-width:120px"><b>{{ p[0] }}</b></span><select name="q{{ q.id }}_{{ loop.index0 }}" style="flex:1;min-width:160px"><option value="">—</option>{% for i in order %}<option>{{ rights[i] }}</option>{% endfor %}</select></div>{% endfor %}{% endif %}
+</fieldset>{% endfor %}
+<button class="btn o" style="width:100%;padding:14px" onclick="return confirm('{{ _('Terminer et envoyer vos réponses ?') }}')"><i class="bi bi-send"></i> {{ _("Terminer et envoyer") }}</button></form>
+<style>.qbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px;background:var(--navy);color:#fff;padding:10px 14px;border-radius:12px;margin-bottom:12px}
+.qq{border:1px solid var(--line)}.qq legend{padding:0 4px}.qt{font-size:16px;margin-bottom:8px}.qt p{margin:0 0 6px}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;margin:6px 0;cursor:pointer}.opt:has(input:checked){border-color:var(--orange);background:#fff7ed}.opt input{margin-top:3px}
+#timer.warn{background:#fee2e2;color:#991b1b}</style>
+{% if remaining is not none %}<script>(function(){var t={{ remaining }},el=document.getElementById('tt'),b=document.getElementById('timer'),f=document.getElementById('qf');
+function tick(){if(t<=0){el.textContent='00:00';f.onsubmit=null;f.submit();return}var m=Math.floor(t/60),s=t%60;el.textContent=(m<10?'0':'')+m+':'+(s<10?'0':'')+s;if(t<=60)b.classList.add('warn');t--;setTimeout(tick,1000)}tick()})();</script>{% endif %}
+{% endblock %}

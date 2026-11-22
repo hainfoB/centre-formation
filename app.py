@@ -229,7 +229,8 @@ LABELS = Labels({
     "admin": "Administrateur", "secretaire": "Secrétariat", "formateur": "Formateur", "rh": "Responsable RH",
     "none": "Pas d'envoi automatique", "weekly": "Chaque lundi (semaine écoulée)", "monthly": "Le 1er du mois (mois écoulé)", "end": "À la fin de chaque formation",
     "group": "Groupe", "company": "Entreprise / structure",
-    "k_page": "Page", "k_file": "Fichier", "k_video": "Vidéo", "k_url": "Lien externe", "k_label": "Étiquette",
+    "k_page": "Page", "k_file": "Fichier", "k_video": "Vidéo", "k_url": "Lien externe", "k_label": "Étiquette", "k_quiz": "Quiz", "k_assign": "Devoir",
+    "c_auto": "Terminée à la réussite / à la remise",
     "c_view": "Terminée à la consultation", "c_manual": "Le stagiaire coche « J'ai terminé »", "c_none": "Pas de suivi",
     "ticket": "QR ticket", "room": "QR salle", "code": "Code", "manual": "Manuel",
     "in": "Entrée", "out": "Sortie", "fees": "Frais de formation",
@@ -2810,6 +2811,8 @@ entreprise.register(app, globals())
 mail_status = globals()["mail_status"]
 import elearning  # noqa: E402  (online courses)
 elearning.register(app, globals())
+import assess  # noqa: E402  (quiz, assignments, gradebook)
+assess.register(app, globals())
 
 if os.environ.get("SEED_PRO_DEMO"):      # creates the demo school once (never deletes anything)
     with app.app_context():
@@ -2820,6 +2823,9 @@ if os.environ.get("SEED_PRO_DEMO"):      # creates the demo school once (never d
             import seed_courses
             if seed_courses.add():
                 print("💻 Cours en ligne de démonstration créés.")
+            import seed_assess
+            if seed_assess.add():
+                print("📝 Quiz et devoirs de démonstration créés.")
             _target = os.environ.get("SUPERADMIN_SCHOOL")        # slug: the super admin works inside this school
             _email = (os.environ.get("SUPERADMIN_EMAIL") or "").strip().lower()
             if _target and _email:

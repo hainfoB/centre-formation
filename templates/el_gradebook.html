@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block title %}{{ _("Carnet de notes") }}{% endblock %}{% block content %}
+<div class="head"><div><div class="xs muted"><a href="{{ url_for('el_course', cid=c.id) }}">{{ c.title }}</a></div><h1>{{ _("Carnet de notes") }}</h1><div class="small muted">{{ _("Notes sur 20. La moyenne porte sur les évaluations déjà notées.") }}</div></div>
+<a class="btn sm" href="{{ url_for('el_gradebook', cid=c.id, format='xlsx') }}"><i class="bi bi-file-earmark-excel"></i> Excel</a></div>
+<div class="card"><div class="tw"><table><thead><tr><th style="position:sticky;left:0;background:#fff">{{ _("Stagiaire") }}</th>{% for x in items %}<th class="center"><a href="{{ url_for('el_quiz_results' if x.kind=='quiz' else 'el_assign', cid=c.id, aid=x.id) }}"><i class="bi bi-{{ KIND_ICONS[x.kind] }}"></i> {{ x.title[:30] }}</a></th>{% endfor %}<th class="center">{{ _("Moyenne") }}</th></tr></thead><tbody>
+{% for r in rows %}<tr><td style="position:sticky;left:0;background:#fff"><b>{{ r.enr.student.full_name }}</b></td>{% for v in r.vals %}<td class="center">{% if v is none %}<span class="muted">—</span>{% else %}<b style="color:{{ '#16a34a' if v >= 50 else '#dc2626' }}">{{ (v/5)|num }}</b>{% endif %}</td>{% endfor %}
+<td class="center">{% if r.avg is none %}—{% else %}<span class="badge {{ 'b-paid' if r.avg >= 50 else 'b-overdue' }}" style="font-size:13px">{{ (r.avg/5)|num }} / 20</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="9" class="empty">{{ _("Aucun stagiaire.") }}</td></tr>{% endfor %}</tbody></table></div>
+{% if not items %}<p class="small muted">{{ _("Ajoutez un quiz ou un devoir au cours pour alimenter le carnet de notes.") }}</p>{% endif %}</div>
+{% endblock %}

@@ -287,9 +287,11 @@ def register(app, A):  # noqa: C901
             a.body = (f.get("body") or "").strip() or None
             a.url = (f.get("url") or "").strip()[:500] or None
             a.duration_min = A["to_int"](f.get("duration_min"), 0, 10000) or None
-            a.completion = f.get("completion") if f.get("completion") in ("view", "manual", "none") else "view"
+            a.completion = f.get("completion") if f.get("completion") in ("view", "manual", "none", "auto") else "view"
             if a.kind == "label":
                 a.completion = "none"
+            if a.kind in ("quiz", "assign") and A.get("save_activity_opts"):
+                A["save_activity_opts"](a, f)
             a.available_from = A["parse_date"](f.get("available_from"))
             a.visible = not f.get("hidden")
             if a.kind == "file":
@@ -308,7 +310,8 @@ def register(app, A):  # noqa: C901
             db.session.commit()
             flash(_("Ressource enregistrée."), "success")
             return redirect(url_for("el_course", cid=c.id) + f"#s{a.section_id}")
-        return render_template("el_activity_form.html", c=c, a=a, kind=kind, sid=sid, sections=c.sections.all())
+        return render_template("el_activity_form.html", c=c, a=a, kind=kind, sid=sid, sections=c.sections.all(),
+                               o=a.opts() if a else {}, bank=A["bank_for"](c) if kind == "quiz" else [])
 
     @app.route("/elearning/<int:cid>/suivi")
     @staff_required
@@ -387,6 +390,11 @@ def register(app, A):  # noqa: C901
                 flat.append(a)
         return flat, locked_ids
 
+    def is_locked(c, enr, a):
+        return a.id in ordered_open(c, enr, progress(c, enr))[1]
+
+    A["el_locked"] = is_locked
+
     def mark(enr, a, complete):
         r = ActivityCompletion.query.filter_by(activity_id=a.id, enrollment_id=enr.id).first()
         if not r:
@@ -412,6 +420,8 @@ def register(app, A):  # noqa: C901
         if a.id in locked and not prev:
             flash(_("Cette ressource n'est pas encore accessible."), "error")
             return redirect(url_for("learn_course", token=token, cid=c.id))
+        if a.kind in ("quiz", "assign"):
+            return redirect(url_for("learn_eval", token=token, aid=a.id, apercu=1 if prev else None))
         if not prev:
             if request.method == "POST":
                 mark(enr, a, request.form.get("done") == "1")

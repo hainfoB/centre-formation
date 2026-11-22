@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ _("Mes notes") }}{% endblock %}{% block public %}{% set q = '' %}{% set preview = false %}{% include "_learn_head.html" %}
+<h1 style="color:var(--navy);margin:10px 0">{{ _("Mes notes") }}</h1>
+{% if avg is not none %}<div class="card center" style="background:var(--navy);color:#fff"><div class="xs" style="opacity:.8">{{ _("Moyenne") }}</div><div style="font-size:40px;font-weight:800">{{ (avg/5)|num }} / 20</div></div>{% endif %}
+{% for x, v in vals %}<div class="card row" style="justify-content:space-between;gap:10px"><div><i class="bi bi-{{ KIND_ICONS[x.kind] }}" style="color:var(--orange)"></i> <b>{{ x.title }}</b>{% if fbs.get(x.id) and fbs[x.id].feedback %}<div class="xs muted" style="margin-top:4px">{{ fbs[x.id].feedback }}</div>{% endif %}</div>
+<b style="font-size:18px;color:{{ 'var(--muted)' if v is none else '#16a34a' if v >= 50 else '#dc2626' }}">{{ '—' if v is none or (x.kind=='quiz' and x.opts().get('review')=='never') else ((v/5)|num ~ ' / 20') }}</b></div>
+{% else %}<div class="card muted center">{{ _("Pas encore d'évaluation dans ce cours.") }}</div>{% endfor %}
+{% endblock %}

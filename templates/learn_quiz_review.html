@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ a.title }}{% endblock %}{% block public %}
+{% set q = '' %}{% set preview = false %}{% include "_learn_head.html" %}
+{% set passed = (at.pct or 0) >= o.get('pass_pct', 0) %}
+<section class="res {{ 'ok' if passed else 'ko' }}">{% if o.get('review') == 'never' %}<h1>{{ _("Réponses envoyées") }}</h1><p>{{ _("Votre formateur vous communiquera le résultat.") }}</p>
+{% else %}<div class="big">{{ at.pct|num }} %</div><div><b>{{ (at.pct/5)|num }} / 20</b> · {{ at.score|num }} / {{ at.max_score|num }} pt</div><h1>{{ _("Bravo, quiz réussi !") if passed else _("Pas encore réussi") }}</h1>
+<p>{{ _("Seuil de réussite") }} : {{ o.get('pass_pct', 0) }} %</p>{% endif %}
+<div class="row" style="gap:8px;justify-content:center;flex-wrap:wrap"><a class="btn" href="{{ url_for('learn_eval', token=enr.token, aid=a.id) }}">{{ _("Retour au quiz") }}</a><a class="btn o" href="{{ url_for('learn_course', token=enr.token, cid=c.id) }}">{{ _("Continuer le cours") }}</a></div></section>
+{% if o.get('review', 'after') == 'after' %}{% for x in qs %}{% set g = grade(x, ans.get(x.id|string)) %}{% set d = x.d() %}{% set aa = ans.get(x.id|string) %}
+<div class="card rv {{ 'good' if g[1] >= 1 else 'part' if g[1] > 0 else 'bad' }}"><div class="row" style="justify-content:space-between"><span class="xs muted">{{ _("Question") }} {{ loop.index }}</span><b class="small">{{ g[0]|num }} / {{ x.points|num }}</b></div>
+<div style="margin:4px 0 8px">{{ x.text|md }}</div>
+<div class="small"><b>{{ _("Votre réponse") }} :</b> {% if x.qtype=='mcq' %}{{ d.options[aa|int].t if aa not in (none,'') else '—' }}{% elif x.qtype=='multi' %}{% for i in (aa or []) %}{{ d.options[i|int].t }}{{ ' · ' if not loop.last }}{% else %}—{% endfor %}{% elif x.qtype=='tf' %}{{ _('Vrai') if aa=='1' else _('Faux') if aa=='0' else '—' }}{% elif x.qtype=='match' %}{% for p in d.pairs %}{{ p[0] }} → {{ (aa or {}).get(loop.index0|string) or '—' }}{{ ' · ' if not loop.last }}{% endfor %}{% else %}{{ aa or '—' }}{% endif %}</div>
+{% if g[1] < 1 %}<div class="small" style="color:#15803d;margin-top:4px"><b>{{ _("Bonne réponse") }} :</b> {{ correct_text(x) }}</div>{% endif %}
+{% if x.feedback %}<div class="xs" style="margin-top:6px;background:#f8fafc;padding:8px;border-radius:8px"><i class="bi bi-lightbulb"></i> {{ x.feedback }}</div>{% endif %}</div>{% endfor %}{% endif %}
+<style>.res{text-align:center;border-radius:18px;padding:22px;margin:10px 0 14px;color:#fff;background:var(--navy)}.res.ok{background:linear-gradient(135deg,#15803d,#16a34a)}.res .big{font-size:48px;font-weight:800}.res h1{margin:8px 0 4px;font-size:22px}.res p{opacity:.85;margin:0 0 12px}
+.rv{border-inline-start:5px solid #16a34a}.rv.part{border-inline-start-color:#f59e0b}.rv.bad{border-inline-start-color:#dc2626}.rv p{margin:0}</style>
+{% endblock %}

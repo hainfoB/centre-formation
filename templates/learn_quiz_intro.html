@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ a.title }}{% endblock %}{% block public %}{% include "_learn_head.html" %}
+<article class="card" style="margin-top:10px"><div class="xs" style="color:#b45309;font-weight:700"><i class="bi bi-patch-question"></i> {{ _("Quiz") }}</div><h1 style="font-size:24px;color:var(--navy);margin:6px 0 10px">{{ a.title }}</h1>
+<div class="mdb">{{ a.body|md }}</div>
+<div class="qi"><div><i class="bi bi-list-ol"></i><b>{{ nq or 0 }}</b><span>{{ _("questions") }}</span></div><div><i class="bi bi-stopwatch"></i><b>{{ (o.time_limit ~ ' min') if o.get('time_limit') else '—' }}</b><span>{{ _("durée") }}</span></div>
+<div><i class="bi bi-arrow-repeat"></i><b>{{ left if left is not none else '∞' }}</b><span>{{ _("tentative(s) restante(s)") }}</span></div><div><i class="bi bi-flag"></i><b>{{ o.get('pass_pct', 0) }} %</b><span>{{ _("pour réussir") }}</span></div></div>
+{% if best is not none and o.get('review') != 'never' %}<div class="box {{ 'ok' if best >= o.get('pass_pct',0) else 'ko' }}">{{ _("Votre note retenue") }} : <b>{{ best|num }} %</b> · <b>{{ (best/5)|num }} / 20</b> — {{ _("Réussi") if best >= o.get('pass_pct',0) else _("Pas encore réussi") }}</div>{% endif %}
+{% if ats %}<h3 style="font-size:15px;margin:14px 0 6px">{{ _("Mes tentatives") }}</h3>{% for t in ats %}<a class="lact" href="{{ url_for('learn_attempt', token=enr.token, atid=t.id) }}"><span class="grow">{{ _("Tentative") }} {{ t.number }} · <span class="xs muted">{{ t.finished_at.strftime('%d/%m/%Y %H:%M') }}</span></span>{% if o.get('review') != 'never' %}<b>{{ t.pct|num }} %</b>{% endif %}</a>{% endfor %}{% endif %}
+<form method="post" style="margin-top:16px">{% if not preview %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+{% if open_at %}<button class="btn o" {{ 'disabled' if preview }}><i class="bi bi-play-fill"></i> {{ _("Reprendre la tentative en cours") }}</button>
+{% elif left is none or left > 0 %}<button class="btn o" {{ 'disabled' if preview }} onclick="return {{ 'confirm(\'' ~ _('Le chronomètre démarre dès que vous commencez. Prêt ?') ~ '\')' if o.get('time_limit') else 'true' }}"><i class="bi bi-play-fill"></i> {{ _("Commencer le quiz") if not ats else _("Nouvelle tentative") }}</button>
+{% else %}<p class="small muted">{{ _("Vous avez utilisé toutes vos tentatives.") }}</p>{% endif %}</form></article>
+<style>.qi{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.qi div{background:#f8fafc;border-radius:12px;padding:10px;text-align:center}.qi i{color:var(--orange);font-size:20px;display:block}.qi b{display:block;font-size:17px;color:var(--navy)}.qi span{font-size:11.5px;color:var(--muted)}
+@media(max-width:480px){.qi{grid-template-columns:1fr 1fr}}.box{border-radius:12px;padding:12px;margin:10px 0}.box.ok{background:#dcfce7;color:#14532d}.box.ko{background:#fef3c7;color:#78350f}
+.lact{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-top:6px;text-decoration:none;color:inherit}.mdb{font-size:15px;line-height:1.6}</style>
+{% endblock %}

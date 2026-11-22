@@ -1,0 +1,2 @@
+{% if preview %}<div class="licbar"><i class="bi bi-eye"></i><span>{{ _("Aperçu : vous voyez le cours comme un stagiaire. Votre navigation n'est pas enregistrée.") }}</span></div>{% endif %}
+<a class="xs" href="{{ url_for('learn_course', token=enr.token, cid=c.id) }}{{ q or '' }}">← {{ c.title }}</a>

@@ -442,7 +442,8 @@ class PlatformSetting(db.Model):
 
 
 # ── E-learning (type Moodle) ──────────────────────────────────────────────────────────────────────
-ACTIVITY_KINDS = ("page", "file", "video", "url", "label")
+ACTIVITY_KINDS = ("page", "file", "video", "url", "label", "quiz", "assign")
+QTYPES = ("mcq", "multi", "tf", "short", "numeric", "match")
 
 
 class Course(Tenant, db.Model):
@@ -493,8 +494,20 @@ class Activity(Tenant, db.Model):
     completion = db.Column(db.String(8), default="view")        # view | manual | none
     visible = db.Column(db.Boolean, default=True)
     available_from = db.Column(db.Date, nullable=True)
+    settings = db.Column(db.Text, nullable=True)                # JSON: quiz / assignment options
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     file = db.relationship("StoredFile")
+
+    def opts(self):
+        import json
+        try:
+            return json.loads(self.settings or "{}")
+        except ValueError:
+            return {}
+
+    def set_opts(self, d):
+        import json
+        self.settings = json.dumps(d, ensure_ascii=False)
 
 
 class StoredFile(Tenant, db.Model):
@@ -514,3 +527,56 @@ class ActivityCompletion(Tenant, db.Model):
     viewed_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime, nullable=True)
     __table_args__ = (db.UniqueConstraint("activity_id", "enrollment_id", name="uq_act_enr"),)
+
+
+class Question(Tenant, db.Model):
+    """Question bank of a course. data (JSON) depends on qtype:
+    mcq/multi: {"options": [{"t": str, "ok": bool, "fb": str}]}; tf: {"answer": bool};
+    short: {"answers": [str], "case": bool}; numeric: {"answer": float, "tol": float}; match: {"pairs": [[left, right]]}"""
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False, index=True)
+    category = db.Column(db.String(80), nullable=True)
+    qtype = db.Column(db.String(8), default="mcq")
+    text = db.Column(db.Text, nullable=False)
+    data = db.Column(db.Text, nullable=False, default="{}")
+    points = db.Column(db.Float, default=1.0)
+    feedback = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def d(self):
+        import json
+        try:
+            return json.loads(self.data or "{}")
+        except ValueError:
+            return {}
+
+
+class QuizAttempt(Tenant, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activity.id"), nullable=False, index=True)
+    enrollment_id = db.Column(db.Integer, db.ForeignKey("enrollment.id"), nullable=False, index=True)
+    number = db.Column(db.Integer, default=1)
+    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    deadline = db.Column(db.DateTime, nullable=True)
+    finished_at = db.Column(db.DateTime, nullable=True)
+    layout = db.Column(db.Text, nullable=True)       # JSON: [question ids] + shuffled option orders
+    answers = db.Column(db.Text, nullable=True)      # JSON
+    score = db.Column(db.Float, nullable=True)
+    max_score = db.Column(db.Float, nullable=True)
+    pct = db.Column(db.Float, nullable=True)
+
+
+class Submission(Tenant, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activity.id"), nullable=False, index=True)
+    enrollment_id = db.Column(db.Integer, db.ForeignKey("enrollment.id"), nullable=False, index=True)
+    text = db.Column(db.Text, nullable=True)
+    file_id = db.Column(db.Integer, db.ForeignKey("stored_file.id"), nullable=True)
+    submitted_at = db.Column(db.DateTime, nullable=True)
+    late = db.Column(db.Boolean, default=False)
+    grade = db.Column(db.Float, nullable=True)
+    feedback = db.Column(db.Text, nullable=True)
+    graded_at = db.Column(db.DateTime, nullable=True)
+    graded_by = db.Column(db.String(120), nullable=True)
+    file = db.relationship("StoredFile")
+    __table_args__ = (db.UniqueConstraint("activity_id", "enrollment_id", name="uq_sub"),)

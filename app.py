@@ -254,7 +254,7 @@ def inject():
 def centre_settings():
     if g.get("school_id"):
         return Setting.all()
-    return {**Setting.DEFAULTS, "centre_name": "HaithemEduAI", "centre_tagline": "Gestion des écoles et centres de formation"}
+    return {**Setting.DEFAULTS, "centre_name": "AcadémieProLearning", "centre_tagline": "Gestion des écoles et centres de formation"}
 
 
 def licence_info(sc):
@@ -263,7 +263,7 @@ def licence_info(sc):
     left = sc.days_left(today())
     return {"plan": sc.plan, "left": left, "expired": sc.expired(today()),
             "warn": left is not None and (left <= 15 or sc.plan == "trial"),
-            "renew_wa": wa_link(SALES_PHONE, _("Bonjour, je souhaite renouveler la licence HaithemEduAI de « {name} ».",
+            "renew_wa": wa_link(SALES_PHONE, _("Bonjour, je souhaite renouveler la licence AcadémieProLearning de « {name} ».",
                                                 name=sc.name))}
 
 
@@ -2445,7 +2445,7 @@ def licence():
         return redirect(url_for("licence"))
     return render_template("licence.html", sc=sc, plans=PLANS, names=PLAN_NAMES,
                            sales_wa=lambda plan: wa_link(SALES_PHONE, _(
-                               "Bonjour, je souhaite l'offre {plan} de HaithemEduAI pour « {name} ».",
+                               "Bonjour, je souhaite l'offre {plan} de AcadémieProLearning pour « {name} ».",
                                plan=_(PLAN_NAMES[plan]), name=sc.name)))
 
 
@@ -2472,7 +2472,7 @@ def data_import():
     except Exception as e:  # noqa: BLE001
         db.session.rollback()
         print("import error", e)
-        flash(_("Fichier invalide : utilisez un fichier .hedu exporté depuis HaithemEduAI."), "error")
+        flash(_("Fichier invalide : utilisez un fichier .hedu exporté depuis AcadémieProLearning."), "error")
         return redirect(url_for("licence"))
     flash(_("Données importées : {n} élèves, {f} formations, {p} paiements.", n=counts.get("student", 0),
             f=counts.get("formation", 0), p=counts.get("payment", 0)), "success")

@@ -34,7 +34,7 @@
       <p class="lead">{{ c.hero_sub }}</p>
       <div class="cta">
         <a class="btn o lg pulse" href="{{ url_for('signup') }}">{{ c.signup }}</a>
-        <a class="btn ghost lg" href="{{ url_for('static', filename='catalogue/HaithemEduAI-' ~ lang ~ '.pdf') }}" download><i class="bi bi-file-earmark-pdf"></i> {{ c.hero_cta2 }}</a>
+        <a class="btn ghost lg" href="{{ url_for('static', filename='catalogue/AcadémieProLearning-' ~ lang ~ '.pdf') }}" download><i class="bi bi-file-earmark-pdf"></i> {{ c.hero_cta2 }}</a>
         <a class="btn light lg" href="{{ url_for('login') }}"><i class="bi bi-box-arrow-in-right"></i> {{ c.login }}</a>
       </div>
       <ul class="points">{% for p in c.hero_points %}<li><i class="bi bi-check2-circle"></i>{{ p }}</li>{% endfor %}</ul>
@@ -111,7 +111,7 @@
   <div class="catimgs" aria-hidden="true"><img src="{{ I }}/03_dashboard.jpg" alt="" loading="lazy"><img src="{{ I }}/15_payments.jpg" alt="" loading="lazy"><img src="{{ I }}/11_attendance.jpg" alt="" loading="lazy"></div>
   <div><h2>{{ c.cat_h }}</h2><p class="body">{{ c.cat_text }}</p>
     <div class="cta">
-      {% for code, nm in langs.items() %}<a class="btn {{ 'o' if code == lang else 'ghost' }}" href="{{ url_for('static', filename='catalogue/HaithemEduAI-' ~ code ~ '.pdf') }}" download><i class="bi bi-file-earmark-pdf"></i> {{ nm }}</a>{% endfor %}
+      {% for code, nm in langs.items() %}<a class="btn {{ 'o' if code == lang else 'ghost' }}" href="{{ url_for('static', filename='catalogue/AcadémieProLearning-' ~ code ~ '.pdf') }}" download><i class="bi bi-file-earmark-pdf"></i> {{ nm }}</a>{% endfor %}
     </div><small>{{ c.cat_btn }}</small>
   </div>
 </div></section>

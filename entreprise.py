@@ -479,6 +479,9 @@ def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with t
                     st.company_id = None
             elif act == "enroll":     # enrol all the selected employees in a formation at once
                 fo = Formation.query.get_or_404(f.get("formation_id", type=int))
+                scope = set(co.scope_ids()) | ({co.parent_id} if co.parent_id else set())
+                if not (fo.client_company_id in scope or (fo.for_companies and not fo.client_company_id)):
+                    abort(400)
                 ids = [int(x) for x in f.getlist("student_ids") if x.isdigit()]
                 n = 0
                 for st in Student.query.filter(Student.id.in_(ids or [0]), Student.company_id.in_(co.scope_ids())):
@@ -551,7 +554,9 @@ def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with t
         employees = Student.query.filter(Student.company_id.in_(co.scope_ids())).order_by(Student.last_name, Student.first_name).all()
         free = Student.query.filter(Student.company_id.is_(None)).order_by(Student.last_name, Student.first_name).limit(500).all()
         allc, groups, counts = companies_tree()
-        fos = Formation.query.filter(Formation.status != "done").order_by(Formation.starts_on.desc().nullslast()).all()
+        scope = set(co.scope_ids()) | ({co.parent_id} if co.parent_id else set())
+        fos = [f for f in Formation.query.filter(Formation.status != "done").order_by(Formation.starts_on.desc().nullslast()).all()
+               if f.client_company_id in scope or (f.for_companies and not f.client_company_id)]   # never school support classes
         return render_template("company_detail.html", co=co, blocks=blocks, tot=tot, employees=employees, free=free, groups=groups,
                                counts=counts, children=co.children(), rh_users=User.query.filter_by(role="rh", company_id=co.id).all(),
                                logs=EmailLog.query.filter_by(company_id=co.id).order_by(EmailLog.id.desc()).limit(10).all(),

@@ -210,6 +210,16 @@ class Formation(Tenant, db.Model):
     min_attendance = db.Column(db.Integer, default=80)       # % for the certificate
     cert_requires_payment = db.Column(db.Boolean, default=True)
     auto_confirm = db.Column(db.Boolean, default=False)
+    client_company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=True, index=True)  # intra-entreprise
+    convention_ref = db.Column(db.String(60), nullable=True)                                          # n° de convention / BC
+    for_companies = db.Column(db.Boolean, nullable=True)       # inter-entreprises (public, aimed at companies)
+
+    def client(self):
+        return db.session.get(Company, self.client_company_id) if self.client_company_id else None
+
+    @property
+    def is_pro(self):
+        return bool(self.client_company_id or self.for_companies)
     status = db.Column(db.String(10), default="draft")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     seances = db.relationship("Seance", backref="formation", lazy="dynamic",
@@ -329,7 +339,7 @@ class Payment(Tenant, db.Model):
 
 CASH_OUT = ("salaire", "loyer", "energie", "telecom", "fournitures", "entretien", "publicite", "impots",
             "transport", "equipement", "autre_charge")
-CASH_IN = ("autre_recette", "subvention", "vente", "apport")
+CASH_IN = ("convention", "autre_recette", "subvention", "vente", "apport")
 
 
 class CashEntry(Tenant, db.Model):

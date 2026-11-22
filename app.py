@@ -228,7 +228,7 @@ LABELS = Labels({
     "salaire": "Salaires enseignants", "loyer": "Loyer", "energie": "Électricité, eau, gaz", "telecom": "Internet et téléphone",
     "fournitures": "Fournitures", "entretien": "Entretien et ménage", "publicite": "Publicité", "impots": "Impôts et CNAS",
     "transport": "Transport", "equipement": "Équipement", "autre_charge": "Autre charge",
-    "autre_recette": "Autre recette", "subvention": "Subvention", "vente": "Vente (livres, tenues…)", "apport": "Apport du gérant",
+    "convention": "Convention entreprise", "autre_recette": "Autre recette", "subvention": "Subvention", "vente": "Vente (livres, tenues…)", "apport": "Apport du gérant",
     "hour": "À l'heure", "seance": "À la séance", "month": "Fixe mensuel",
 })
 L = LABELS
@@ -873,6 +873,11 @@ def apply_formation_form(fo, f):
     fo.trainer_id = tid if tid and db.session.get(User, tid) else None
     if fo.trainer_id and not fo.trainer:
         fo.trainer = db.session.get(User, fo.trainer_id).name
+    if f.get("client_company_id") is not None:
+        cid = to_int(f.get("client_company_id"), 0, 10 ** 9)
+        fo.client_company_id = cid if cid and db.session.get(Company, cid) else None
+        fo.convention_ref = (f.get("convention_ref") or "").strip()[:60] or None
+        fo.for_companies = bool(f.get("for_companies")) or None
 
 
 @app.route("/formations", methods=["GET", "POST"])
@@ -1575,16 +1580,18 @@ def catalogue_default():
 def catalogue(sslug):
     if not g.get("school_id"):
         abort(404)
-    items = Formation.query.filter(Formation.status.in_(("open", "running"))).order_by(Formation.starts_on).all()
-    return render_template("catalogue.html", items=items)
+    items = (Formation.query.filter(Formation.status.in_(("open", "running")), Formation.client_company_id.is_(None))
+             .order_by(Formation.starts_on).all())
+    pro = [f for f in items if f.for_companies]
+    return render_template("catalogue.html", items=[f for f in items if not f.for_companies], pro=pro)
 
 
 @app.route("/f/<slug>", methods=["GET", "POST"])
 @rate_limit("register", 20)
 def public_form(slug):
     fo = Formation.query.filter_by(slug=slug).first_or_404()
-    if fo.status == "draft" and not current_user.is_authenticated:
-        abort(404)
+    if (fo.status == "draft" or fo.client_company_id) and not current_user.is_authenticated:
+        abort(404)      # drafts and intra-company sessions are not public
     done = None
     if request.method == "POST" and fo.status == "open":
         f = request.form
@@ -2788,6 +2795,16 @@ def start_scheduler():
 import entreprise  # noqa: E402  (companies, RH portal, sender address)
 entreprise.register(app, globals())
 mail_status = globals()["mail_status"]
+
+if os.environ.get("SEED_PRO_DEMO"):      # creates the demo school once (never deletes anything)
+    with app.app_context():
+        try:
+            import seed_pro
+            if seed_pro.run(today()):
+                print("🎓 École de démonstration AcadémieProLearning créée.")
+        except Exception as _e:  # noqa: BLE001
+            db.session.rollback()
+            print("seed_pro error:", _e)
 
 if os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("ENABLE_SCHEDULER"):
     start_scheduler()

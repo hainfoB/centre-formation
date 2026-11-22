@@ -6,6 +6,9 @@
 <div><label>{{ _("Formateur (nom affiché)") }}</label><input name="trainer" value="{{ fo.trainer or '' if fo }}"></div>
 <div><label>{{ _("Public visé") }}</label><input name="audience" value="{{ fo.audience or '' if fo }}"></div>
 <div><label>{{ _("Mode") }}</label><select name="mode">{% for m in ('onsite','online','hybrid') %}<option value="{{ m }}" {{ 'selected' if fo and fo.mode==m }}>{{ L[m] }}</option>{% endfor %}</select></div>
+{% set _cos = company_options() %}{% if _cos %}<div><label>{{ _("Formation intra-entreprise pour") }}</label><select name="client_company_id"><option value="0">— {{ _("Ouverte à tous (catalogue public)") }} —</option>{% for c in _cos %}<option value="{{ c.id }}" {{ 'selected' if fo and fo.client_company_id==c.id }}>{{ c.label() }}</option>{% endfor %}</select><div class="xs muted">{{ _("Une formation intra n'apparaît pas dans le catalogue public.") }}</div></div>
+<div><label>{{ _("N° de convention / bon de commande") }}</label><input name="convention_ref" value="{{ fo.convention_ref or '' if fo }}"></div>{% endif %}
+<div class="full"><label class="check"><input type="checkbox" name="for_companies" {{ 'checked' if fo and fo.for_companies }}> {{ _("Formation professionnelle destinée aux entreprises (inter-entreprises, affichée dans la rubrique « Entreprises » du catalogue)") }}</label></div>
 <div><label>{{ _("Lieu / salle") }}</label><input name="location" value="{{ fo.location or '' if fo }}"></div>
 <div><label>{{ _("Lien en ligne (Meet…)") }}</label><input name="online_url" value="{{ fo.online_url or '' if fo }}"></div>
 <div><label>{{ _("Groupe WhatsApp / Telegram") }}</label><input name="group_url" value="{{ fo.group_url or '' if fo }}"></div>

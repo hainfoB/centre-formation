@@ -2802,6 +2802,25 @@ if os.environ.get("SEED_PRO_DEMO"):      # creates the demo school once (never d
             import seed_pro
             if seed_pro.run(today()):
                 print("🎓 École de démonstration AcadémieProLearning créée.")
+            _target = os.environ.get("SUPERADMIN_SCHOOL")        # slug: the super admin works inside this school
+            _email = (os.environ.get("SUPERADMIN_EMAIL") or "").strip().lower()
+            if _target and _email:
+                with unscoped():
+                    _sc = School.query.filter_by(slug=_target).first()
+                    _u = User.query.filter_by(email=_email).first()
+                    if _sc and _u and _u.school_id != _sc.id:
+                        _old = _u.school_id
+                        _u.school_id = _sc.id
+                        db.session.flush()
+                        _o = db.session.get(School, _old) if _old else None
+                        if _o and not Student.query.filter_by(school_id=_o.id).count() and \
+                                not Formation.query.filter_by(school_id=_o.id).count() and \
+                                not User.query.filter(User.school_id == _o.id, User.id != _u.id).count():
+                            Setting.query.filter_by(school_id=_o.id).delete()
+                            AuditLog.query.filter_by(school_id=_o.id).delete()
+                            db.session.delete(_o)      # the empty school created by the first boot
+                        db.session.commit()
+                        print(f"👑 Super admin rattaché à « {_sc.name} »")
         except Exception as _e:  # noqa: BLE001
             db.session.rollback()
             print("seed_pro error:", _e)

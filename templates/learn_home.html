@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ _("Mes cours en ligne") }}{% endblock %}{% block public %}
+<h1 style="color:var(--navy)">{{ _("Mes cours en ligne") }}</h1>
+{% for c, p in courses %}<a class="card" style="display:block;text-decoration:none;color:inherit" href="{{ url_for('learn_course', token=enr.token, cid=c.id) }}"><b>{{ c.title }}</b><div style="height:8px;background:#eef1f6;border-radius:9px;margin-top:8px;overflow:hidden"><div style="width:{{ p.pct }}%;height:100%;background:var(--orange)"></div></div><div class="xs muted" style="margin-top:4px">{{ p.pct }} %</div></a>
+{% else %}<div class="card muted center">{{ _("Aucun cours en ligne pour le moment.") }}</div>{% endfor %}
+<p><a href="{{ url_for('ticket', token=enr.token) }}">← {{ _("Mon espace") }}</a></p>{% endblock %}

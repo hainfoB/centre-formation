@@ -32,7 +32,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)   # Railway 
 if not os.environ.get("SECRET_KEY"):
     print("⚠️  SECRET_KEY absente : les sessions et QR seront invalidés à chaque redémarrage.")
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or "dev-" + hashlib.sha256(os.urandom(16)).hexdigest()
-app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024        # uploads (Excel, logo) ≤ 5 Mo
+app.config["MAX_CONTENT_LENGTH"] = 21 * 1024 * 1024       # uploads (Excel, logo, course files ≤ 20 Mo)
 _PROD = bool(os.environ.get("RAILWAY_ENVIRONMENT"))
 app.config.update(SESSION_COOKIE_SECURE=_PROD, REMEMBER_COOKIE_SECURE=_PROD, SESSION_COOKIE_HTTPONLY=True,
                   REMEMBER_COOKIE_HTTPONLY=True, REMEMBER_COOKIE_DURATION=timedelta(days=14),
@@ -229,6 +229,8 @@ LABELS = Labels({
     "admin": "Administrateur", "secretaire": "Secrétariat", "formateur": "Formateur", "rh": "Responsable RH",
     "none": "Pas d'envoi automatique", "weekly": "Chaque lundi (semaine écoulée)", "monthly": "Le 1er du mois (mois écoulé)", "end": "À la fin de chaque formation",
     "group": "Groupe", "company": "Entreprise / structure",
+    "k_page": "Page", "k_file": "Fichier", "k_video": "Vidéo", "k_url": "Lien externe", "k_label": "Étiquette",
+    "c_view": "Terminée à la consultation", "c_manual": "Le stagiaire coche « J'ai terminé »", "c_none": "Pas de suivi",
     "ticket": "QR ticket", "room": "QR salle", "code": "Code", "manual": "Manuel",
     "in": "Entrée", "out": "Sortie", "fees": "Frais de formation",
     "salaire": "Salaires enseignants", "loyer": "Loyer", "energie": "Électricité, eau, gaz", "telecom": "Internet et téléphone",
@@ -2806,6 +2808,8 @@ def start_scheduler():
 import entreprise  # noqa: E402  (companies, RH portal, sender address)
 entreprise.register(app, globals())
 mail_status = globals()["mail_status"]
+import elearning  # noqa: E402  (online courses)
+elearning.register(app, globals())
 
 if os.environ.get("SEED_PRO_DEMO"):      # creates the demo school once (never deletes anything)
     with app.app_context():
@@ -2813,6 +2817,9 @@ if os.environ.get("SEED_PRO_DEMO"):      # creates the demo school once (never d
             import seed_pro
             if seed_pro.run(today()):
                 print("🎓 École de démonstration AcadémieProLearning créée.")
+            import seed_courses
+            if seed_courses.add():
+                print("💻 Cours en ligne de démonstration créés.")
             _target = os.environ.get("SUPERADMIN_SCHOOL")        # slug: the super admin works inside this school
             _email = (os.environ.get("SUPERADMIN_EMAIL") or "").strip().lower()
             if _target and _email:

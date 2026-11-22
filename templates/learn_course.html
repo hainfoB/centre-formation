@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ c.title }}{% endblock %}{% block public %}
+{% set q = '?apercu=1' if preview else '' %}
+{% if preview %}<div class="licbar"><i class="bi bi-eye"></i><span>{{ _("Aperçu : vous voyez le cours comme un stagiaire. Votre navigation n'est pas enregistrée.") }}</span></div>{% endif %}
+<a class="xs" href="{{ url_for('ticket', token=enr.token) }}">← {{ _("Mon espace") }}</a>
+<section class="lc-h"><div class="lc-k"><i class="bi bi-laptop"></i> {{ _("Cours en ligne") }} · {{ enr.formation.title }}</div><h1>{{ c.title }}</h1>
+{% if c.summary %}<p>{{ c.summary }}</p>{% endif %}
+<div class="lc-p"><div class="ring" style="--p:{{ pr.pct }}"><b>{{ pr.pct }}%</b></div><div><b>{{ pr.done }} / {{ pr.total }}</b> {{ _("activités terminées") }}<div class="xs" style="opacity:.8">{{ _("Bonjour") }} {{ enr.student.first_name }} 👋</div></div>
+{% if nxt %}<a class="btn o" href="{{ url_for('learn_activity', token=enr.token, aid=nxt.id) }}{{ q }}">{{ _("Continuer") if pr.done else _("Commencer") }} <i class="bi bi-play-fill"></i></a>{% elif pr.total %}<span class="badge b-paid" style="font-size:14px">🎉 {{ _("Cours terminé") }}</span>{% endif %}</div></section>
+{% for s, acts, locked, complete in secs %}<div class="card lsec {{ 'locked' if locked }}"><div class="row" style="justify-content:space-between"><h2 style="margin:0;font-size:18px">{{ s.title }}</h2>
+{% if locked %}<span class="badge"><i class="bi bi-lock"></i> {{ _("Terminez la section précédente") }}</span>{% elif complete and acts %}<span class="badge b-paid"><i class="bi bi-check2"></i> {{ _("Terminée") }}</span>{% endif %}</div>
+{% if s.summary %}<p class="small muted" style="margin:4px 0 0">{{ s.summary }}</p>{% endif %}
+{% for a in acts %}{% if a.kind == 'label' %}<div class="lbl">{{ a.body|md }}</div>{% else %}
+{% set wait = a.available_from and a.available_from > today_ %}
+{% if locked or wait %}<div class="lact off">{% else %}<a class="lact" href="{{ url_for('learn_activity', token=enr.token, aid=a.id) }}{{ q }}">{% endif %}
+<span class="ai k-{{ a.kind }}"><i class="bi bi-{{ KIND_ICONS[a.kind] }}"></i></span><span class="grow"><b>{{ a.title }}</b><span class="xs muted" style="display:block">{{ L['k_' ~ a.kind] }}{% if a.duration_min %} · {{ a.duration_min }} min{% endif %}{% if wait %} · {{ _("disponible le") }} {{ a.available_from|d }}{% endif %}</span></span>
+{% if a.id in pr.done_ids %}<i class="bi bi-check-circle-fill" style="color:#16a34a;font-size:22px" aria-label="{{ _('Terminé') }}"></i>{% elif locked or wait %}<i class="bi bi-lock" style="color:#94a3b8"></i>{% elif a.completion != 'none' %}<i class="bi bi-circle" style="color:#cbd5e1;font-size:22px" aria-label="{{ _('À faire') }}"></i>{% endif %}
+{% if locked or wait %}</div>{% else %}</a>{% endif %}{% endif %}{% endfor %}</div>{% endfor %}
+<style>.lc-h{background:var(--navy);color:#fff;border-radius:18px;padding:22px;margin:10px 0 16px;background-image:radial-gradient(circle at 95% 0,rgba(249,115,22,.35),transparent 45%)}
+.lc-k{font-size:12px;color:#ffb27a;font-weight:700}.lc-h h1{margin:6px 0;font-size:24px}.lc-h p{opacity:.85;margin:0 0 12px}
+.lc-p{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.lc-p .btn{margin-inline-start:auto}
+.ring{--p:0;width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--orange) calc(var(--p)*1%),rgba(255,255,255,.15) 0)}.ring b{background:var(--navy);width:50px;height:50px;border-radius:50%;display:grid;place-items:center;font-size:14px}
+.lact{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:12px;margin-top:8px;text-decoration:none;color:inherit;background:#fff;transition:border-color .15s}.lact:hover{border-color:var(--orange)}.lact.off{opacity:.55}
+.ai{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-size:18px;flex:none;background:#fff3e8;color:var(--orange)}.ai.k-video{background:#fee2e2;color:#dc2626}.ai.k-file{background:#e0e7ff;color:#3730a3}.ai.k-url{background:#dcfce7;color:#15803d}
+.lbl{margin-top:8px;padding:10px 12px;background:#f6f8fb;border-radius:10px;font-size:14px}.lbl p{margin:0}.lsec.locked{background:#fafbfd}</style>
+{% endblock %}

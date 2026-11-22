@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}{{ _("E-learning") }}{% endblock %}{% block content %}
+<div class="head"><div><h1>{{ _("E-learning") }}</h1><div class="small muted">{{ _("Des cours en ligne rattachés à vos formations : les stagiaires inscrits y accèdent depuis leur lien personnel, sans mot de passe.") }}</div></div>
+<button class="btn o" onclick="var d=document.getElementById('newc');d.open=true;d.scrollIntoView({behavior:'smooth'})"><i class="bi bi-plus-lg"></i> {{ _("Nouveau cours") }}</button></div>
+<div class="grid-el">{% for c in courses %}{% set s = stats[c.id] %}
+<a class="elc" href="{{ url_for('el_course', cid=c.id) }}"><div class="elc-top {{ 'pro' if c.formation.is_pro }}"><i class="bi bi-laptop"></i><span class="badge {{ 'b-paid' if c.status=='published' else 'b-due' }}">{{ _("Publié") if c.status=='published' else _("Brouillon") }}</span></div>
+<div class="elc-b"><h3>{{ c.title }}</h3><div class="xs muted">{{ c.formation.title }}</div>
+<div class="row" style="gap:14px;margin:10px 0 6px;font-size:13px"><span><i class="bi bi-collection"></i> {{ s.acts }} {{ _("activités") }}</span><span><i class="bi bi-people"></i> {{ s.learners }}</span><span><i class="bi bi-trophy"></i> {{ s.done }} {{ _("terminé(s)") }}</span></div>
+<div style="height:7px;background:#eef1f6;border-radius:9px;overflow:hidden"><div style="width:{{ s.avg }}%;height:100%;background:var(--orange)"></div></div><div class="xs muted" style="margin-top:4px">{{ _("Progression moyenne") }} {{ s.avg }} % · {{ s.started }} / {{ s.learners }} {{ _("ont commencé") }}</div></div></a>
+{% else %}<div class="card empty" style="grid-column:1/-1"><i class="bi bi-laptop"></i>{{ _("Aucun cours en ligne. Créez le premier à partir d'une formation.") }}</div>{% endfor %}</div>
+<details class="card" id="newc" {{ 'open' if not courses }}><summary><b>{{ _("Nouveau cours en ligne") }}</b></summary>
+<form method="post" style="margin-top:12px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="fields"><div><label>{{ _("Formation") }}</label><select name="formation_id" required>{% for f in fos %}<option value="{{ f.id }}">{{ f.title }}</option>{% endfor %}</select><div class="xs muted">{{ _("Les stagiaires confirmés de cette formation seront les participants.") }}</div></div>
+<div><label>{{ _("Titre du cours") }}</label><input name="title" placeholder="{{ _('Laisser vide pour reprendre le titre de la formation') }}"></div>
+<div class="full"><label>{{ _("Présentation") }}</label><textarea name="summary" rows="2"></textarea></div></div>
+<button class="btn o" style="margin-top:10px">{{ _("Créer le cours") }}</button></form></details>
+<style>.grid-el{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:16px}
+.elc{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;text-decoration:none;color:inherit;transition:transform .15s,box-shadow .15s}.elc:hover{transform:translateY(-3px);box-shadow:0 12px 26px rgba(11,37,69,.12)}
+.elc-top{height:76px;background:linear-gradient(135deg,#f97316,#fb923c);position:relative;padding:12px 14px;display:flex;justify-content:flex-end;align-items:flex-start}.elc-top.pro{background:linear-gradient(135deg,var(--navy),#1d4f86)}
+.elc-top i{position:absolute;left:14px;bottom:-6px;font-size:54px;color:rgba(255,255,255,.3)}.elc-b{padding:14px}.elc-b h3{margin:0 0 2px;font-size:16px;color:var(--navy)}</style>
+{% endblock %}

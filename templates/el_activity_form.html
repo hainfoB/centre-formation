@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}{{ L['k_' ~ kind] }}{% endblock %}{% block content %}
+<div class="head"><div><div class="xs muted"><a href="{{ url_for('el_course', cid=c.id) }}">{{ c.title }}</a></div><h1><i class="bi bi-{{ KIND_ICONS[kind] }}" style="color:var(--orange)"></i> {{ (_("Modifier") if a else _("Ajouter")) }} : {{ L['k_' ~ kind] }}</h1></div></div>
+<div class="card"><form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="fields"><div><label>{{ _("Titre *") }}</label><input name="title" required value="{{ a.title if a else '' }}"></div>
+<div><label>{{ _("Section") }}</label><select name="section_id">{% for s in sections %}<option value="{{ s.id }}" {{ 'selected' if s.id==sid }}>{{ loop.index0 }}. {{ s.title }}</option>{% endfor %}</select></div>
+{% if kind in ('video','url') %}<div class="full"><label>{{ _("Adresse (URL) *") }}</label><input type="url" name="url" value="{{ a.url or '' if a }}" placeholder="{{ 'https://www.youtube.com/watch?v=…' if kind=='video' else 'https://…' }}">{% if kind=='video' %}<div class="xs muted">{{ _("YouTube, Vimeo, Google Drive ou lien direct vers un fichier MP4.") }}</div>{% endif %}</div>{% endif %}
+{% if kind == 'file' %}<div class="full"><label>{{ _("Fichier (PDF, Word, PowerPoint, Excel, image… 20 Mo max.)") }}</label><input type="file" name="file">{% if a and a.file %}<div class="xs muted">{{ _("Actuel") }} : <a href="{{ url_for('el_file', fid=a.file_id) }}">{{ a.file.name }}</a> ({{ (a.file.size/1024)|round|int }} Ko)</div>{% endif %}</div>{% endif %}
+<div class="full"><label>{{ _("Contenu de la page") if kind=='page' else (_("Texte de l'étiquette") if kind=='label' else _("Description / consignes")) }}</label>
+<textarea name="body" rows="{{ 14 if kind=='page' else 4 }}" placeholder="{{ _('# Titre\n**gras**, *italique*\n- liste\n[lien](https://…)') if kind=='page' else '' }}">{{ a.body or '' if a }}</textarea>
+<div class="xs muted">{{ _("Mise en forme simple : # titre, **gras**, *italique*, - liste, 1. liste numérotée, [texte](lien), ![image](lien).") }}</div></div>
+{% if kind != 'label' %}<div><label>{{ _("Achèvement") }}</label><select name="completion">{% for k in ('view','manual','none') %}<option value="{{ k }}" {{ 'selected' if (a.completion if a else 'view')==k }}>{{ L['c_' ~ k] }}</option>{% endfor %}</select></div>
+<div><label>{{ _("Durée estimée (minutes)") }}</label><input type="number" min="0" name="duration_min" value="{{ a.duration_min or '' if a }}"></div>{% endif %}
+<div><label>{{ _("Disponible à partir du (facultatif)") }}</label><input type="date" name="available_from" value="{{ a.available_from or '' if a }}"></div>
+<div><label class="check" style="margin-top:28px"><input type="checkbox" name="hidden" {{ 'checked' if a and not a.visible }}> {{ _("Masquer aux stagiaires") }}</label></div></div>
+<div class="row" style="gap:8px;margin-top:14px"><button class="btn o">{{ _("Enregistrer") }}</button><a class="btn ghost" href="{{ url_for('el_course', cid=c.id) }}">{{ _("Annuler") }}</a></div></form></div>
+{% endblock %}

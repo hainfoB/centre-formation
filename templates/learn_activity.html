@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ a.title }}{% endblock %}{% block public %}
+{% if preview %}<div class="licbar"><i class="bi bi-eye"></i><span>{{ _("Aperçu : vous voyez le cours comme un stagiaire. Votre navigation n'est pas enregistrée.") }}</span></div>{% endif %}
+<div class="row" style="justify-content:space-between;gap:8px"><a class="xs" href="{{ url_for('learn_course', token=enr.token, cid=c.id) }}{{ q }}">← {{ c.title }}</a><span class="xs muted">{{ pr.pct }} % · {{ pr.done }}/{{ pr.total }}</span></div>
+<div style="height:6px;background:#eef1f6;border-radius:9px;margin:8px 0 14px;overflow:hidden"><div style="width:{{ pr.pct }}%;height:100%;background:var(--orange)"></div></div>
+<article class="card la"><div class="xs" style="color:var(--orange);font-weight:700"><i class="bi bi-{{ KIND_ICONS[a.kind] }}"></i> {{ L['k_' ~ a.kind] }}{% if a.duration_min %} · {{ a.duration_min }} min{% endif %}</div>
+<h1>{{ a.title }}</h1>
+{% if a.kind == 'video' %}{% set v = video_embed(a.url) %}
+ {% if v[0] == 'iframe' %}<div class="vid"><iframe src="{{ v[1] }}" title="{{ a.title }}" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>
+ {% elif v[0] == 'video' %}<video controls preload="metadata" style="width:100%;border-radius:12px" src="{{ v[1] }}"></video>
+ {% else %}<a class="btn o" href="{{ a.url }}" target="_blank" rel="noopener"><i class="bi bi-play-circle"></i> {{ _("Regarder la vidéo") }}</a>{% endif %}{% endif %}
+{% if a.kind == 'file' and a.file %}<div class="fcard"><i class="bi bi-file-earmark-{{ 'pdf' if (a.file.mime or '').startswith('application/pdf') else 'text' }}"></i><div class="grow"><b>{{ a.file.name }}</b><div class="xs muted">{{ (a.file.size/1024)|round|int }} Ko</div></div>
+<a class="btn o" href="{{ url_for('learn_file', token=enr.token, aid=a.id) }}{{ q }}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> {{ _("Ouvrir") }}</a></div>
+{% if (a.file.mime or '').startswith('application/pdf') %}<iframe class="pdfv" src="{{ url_for('learn_file', token=enr.token, aid=a.id) }}{{ q }}" title="{{ a.file.name }}"></iframe>{% elif (a.file.mime or '').startswith('image/') %}<img src="{{ url_for('learn_file', token=enr.token, aid=a.id) }}{{ q }}" alt="{{ a.title }}" style="max-width:100%;border-radius:12px">{% endif %}
+ <a class="btn" href="{{ url_for('learn_file', token=enr.token, aid=a.id, dl=1, apercu=1 if preview else None) }}"><i class="bi bi-download"></i> {{ _("Télécharger") }} · {{ a.file.name }} ({{ (a.file.size/1024)|round|int }} Ko)</a>{% endif %}
+{% if a.kind == 'url' %}<a class="btn o" href="{{ a.url }}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> {{ _("Ouvrir la ressource") }}</a>{% endif %}
+<div class="mdb">{{ a.body|md }}</div>
+{% if a.completion == 'manual' %}<form method="post" style="margin-top:16px">{% if not preview %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+<input type="hidden" name="done" value="{{ '0' if done else '1' }}"><button class="btn {{ 'ghost' if done else 'o' }}" {{ 'disabled' if preview }}><i class="bi bi-{{ 'arrow-counterclockwise' if done else 'check2-circle' }}"></i> {{ _("Marquer comme non terminé") if done else _("J'ai terminé") }}</button></form>
+{% elif done %}<p class="small" style="color:#16a34a;margin-top:14px"><i class="bi bi-check-circle-fill"></i> {{ _("Activité terminée") }}</p>{% endif %}</article>
+<nav class="row" style="justify-content:space-between;gap:8px">{% if prv %}<a class="btn ghost" href="{{ url_for('learn_activity', token=enr.token, aid=prv.id) }}{{ q }}"><i class="bi bi-chevron-{{ 'right' if dir=='rtl' else 'left' }}"></i> {{ prv.title[:34] }}</a>{% else %}<span></span>{% endif %}
+{% if nxt %}<a class="btn o" href="{{ url_for('learn_activity', token=enr.token, aid=nxt.id) }}{{ q }}">{{ nxt.title[:34] }} <i class="bi bi-chevron-{{ 'left' if dir=='rtl' else 'right' }}"></i></a>{% else %}<a class="btn o" href="{{ url_for('learn_course', token=enr.token, cid=c.id) }}{{ q }}">{{ _("Retour au cours") }}</a>{% endif %}</nav>
+<style>.la h1{font-size:24px;color:var(--navy);margin:6px 0 14px}.vid{position:relative;padding-top:56.25%;border-radius:12px;overflow:hidden;background:#000;margin-bottom:14px}.vid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.fcard{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:12px;margin-bottom:12px;background:#f8fafc}.fcard>i{font-size:34px;color:#dc2626}
+@media (max-width:900px){.pdfv{display:none}}
+.pdfv{width:100%;height:70vh;border:1px solid var(--line);border-radius:12px;margin-bottom:10px}.mdb{margin-top:14px;font-size:15.5px;line-height:1.65}.mdb h2,.mdb h3,.mdb h4{color:var(--navy);margin:18px 0 6px}.mdb img{max-width:100%;border-radius:10px}
+.mdb blockquote{margin:10px 0;padding:10px 14px;border-inline-start:4px solid var(--orange);background:#fff3e8;border-radius:8px}.mdb code{background:#f1f5f9;padding:1px 5px;border-radius:5px}</style>
+{% endblock %}

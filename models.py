@@ -439,3 +439,78 @@ class PlatformSetting(db.Model):
             row = cls(key=key)
             db.session.add(row)
         row.value = value
+
+
+# ── E-learning (type Moodle) ──────────────────────────────────────────────────────────────────────
+ACTIVITY_KINDS = ("page", "file", "video", "url", "label")
+
+
+class Course(Tenant, db.Model):
+    """An online course attached to a formation: its confirmed trainees are the participants."""
+    id = db.Column(db.Integer, primary_key=True)
+    formation_id = db.Column(db.Integer, db.ForeignKey("formation.id"), nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    summary = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(10), default="draft")          # draft | published
+    sequential = db.Column(db.Boolean, default=False)           # each section unlocks when the previous one is done
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    formation = db.relationship("Formation")
+    sections = db.relationship("CourseSection", backref="course", order_by="CourseSection.position",
+                               cascade="all, delete-orphan", lazy="dynamic")
+
+    def activities(self, visible_only=False):
+        q = Activity.query.filter_by(course_id=self.id)
+        if visible_only:
+            q = q.filter(Activity.visible.is_(True))
+        acts = q.all()
+        order = {s.id: s.position for s in self.sections}
+        return sorted(acts, key=lambda a: (order.get(a.section_id, 0), a.position, a.id))
+
+
+class CourseSection(Tenant, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False, index=True)
+    position = db.Column(db.Integer, default=0)
+    title = db.Column(db.String(200), nullable=False)
+    summary = db.Column(db.Text, nullable=True)
+    visible = db.Column(db.Boolean, default=True)
+    activities = db.relationship("Activity", backref="section", order_by="Activity.position",
+                                 cascade="all, delete-orphan", lazy="dynamic")
+
+
+class Activity(Tenant, db.Model):
+    """A resource in a section: page, file, video, link or label."""
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False, index=True)
+    section_id = db.Column(db.Integer, db.ForeignKey("course_section.id"), nullable=False, index=True)
+    position = db.Column(db.Integer, default=0)
+    kind = db.Column(db.String(10), default="page")
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text, nullable=True)                    # page text (simple markdown) / description
+    url = db.Column(db.String(500), nullable=True)              # video or external link
+    file_id = db.Column(db.Integer, db.ForeignKey("stored_file.id"), nullable=True)
+    duration_min = db.Column(db.Integer, nullable=True)         # estimated time
+    completion = db.Column(db.String(8), default="view")        # view | manual | none
+    visible = db.Column(db.Boolean, default=True)
+    available_from = db.Column(db.Date, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    file = db.relationship("StoredFile")
+
+
+class StoredFile(Tenant, db.Model):
+    """Uploaded course file, stored in the database (the app server's disk is not persistent)."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    mime = db.Column(db.String(100), nullable=True)
+    size = db.Column(db.Integer, default=0)
+    data = db.Column(db.LargeBinary, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ActivityCompletion(Tenant, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activity.id"), nullable=False, index=True)
+    enrollment_id = db.Column(db.Integer, db.ForeignKey("enrollment.id"), nullable=False, index=True)
+    viewed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    __table_args__ = (db.UniqueConstraint("activity_id", "enrollment_id", name="uq_act_enr"),)

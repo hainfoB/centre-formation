@@ -344,3 +344,69 @@ def attendance_report_pdf(centre, title, subtitle, blocks, generated):
             story.append(PageBreak())
     doc.build(story, onFirstPage=frame, onLaterPages=frame)
     return buf.getvalue()
+
+
+# ── Bordereau d'envoi des attestations (transmittal slip) ─────────────────────────────────────────
+def transmittal_pdf(centre, company, recipients, rows, generated, ref):
+    """rows: [{"name","matricule","job","structure","formation","period","hours","rate","cert_no"}]"""
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    buf = io.BytesIO()
+    W, H = landscape(A4)
+    logo = _logo_reader(centre)
+    font = "Taj" if _HAS_AR else "Helvetica"
+    fontb = "Taj-Bold" if _HAS_AR else "Helvetica-Bold"
+    sh = lambda t: _shape(t or "")[0]  # noqa: E731
+
+    def frame(c, doc):
+        c.saveState()
+        c.setFillColor(NAVY)
+        c.rect(0, H - 52, W, 52, fill=1, stroke=0)
+        c.setFillColor(ORANGE)
+        c.rect(0, H - 55, W, 3, fill=1, stroke=0)
+        x = 24
+        if logo:
+            c.drawImage(logo, 22, H - 46, 38, 38, preserveAspectRatio=True, mask="auto")
+            x = 70
+        c.setFillColor(white)
+        _fit(c, centre.get("centre_name", ""), x, H - 24, 400, 14, bold=True)
+        _fit(c, "Bordereau d'envoi des attestations de formation", x, H - 41, 420, 10)
+        _fit(c, f"Réf. {ref}", W - 24, H - 24, 300, 10, align="right", bold=True)
+        _fit(c, generated, W - 24, H - 41, 300, 9, align="right")
+        c.setFillColor(GREY)
+        c.setFont(font, 7.5)
+        line = " · ".join(x for x in (centre.get("centre_address"), centre.get("centre_phone"), centre.get("centre_email"),
+                                       ("Agrément " + centre["centre_agrement"]) if centre.get("centre_agrement") else "") if x)
+        c.drawString(24, 16, sh(line))
+        c.drawRightString(W - 24, 16, f"{doc.page}")
+        c.restoreState()
+
+    doc = SimpleDocTemplate(buf, pagesize=(W, H), leftMargin=24, rightMargin=24, topMargin=70, bottomMargin=34,
+                            title=f"Bordereau {company}")
+    st = ParagraphStyle("p", fontName=font, fontSize=9.5, textColor=NAVY, leading=13)
+    stb = ParagraphStyle("b", fontName=fontb, fontSize=12, textColor=NAVY, spaceAfter=4)
+    story = [Paragraph(sh(f"Destinataire : {company}"), stb),
+             Paragraph(sh("À l'attention de : " + (", ".join(recipients) if recipients else "Responsable des ressources humaines")), st),
+             Paragraph(sh(f"Objet : transmission de {len(rows)} attestation(s) de formation. Chaque attestation porte un QR code "
+                          "permettant d'en vérifier l'authenticité en ligne."), st), Spacer(1, 10)]
+    data = [[sh(h) for h in ("N°", "Salarié", "Matricule", "Fonction", "Structure", "Formation", "Période", "Heures", "Assiduité", "N° attestation")]]
+    cs = ParagraphStyle("c", fontName=font, fontSize=7.4, leading=9, textColor=NAVY)
+    P = lambda t: Paragraph(sh(t or "").replace("&", "&amp;"), cs)  # noqa: E731
+    for i, r in enumerate(rows, 1):
+        data.append([str(i), P(r["name"]), sh(r.get("matricule")), P(r.get("job")), P(r.get("structure")), P(r["formation"]),
+                     P((r.get("period") or "").replace(" → ", " →<br/>")), str(r.get("hours") or ""), f'{r.get("rate", 0)} %',
+                     sh(r.get("cert_no"))])
+    t = Table(data, colWidths=[22, 104, 52, 104, 96, 150, 68, 40, 54, 94], repeatRows=1)
+    t.setStyle(TableStyle([("FONT", (0, 0), (-1, -1), font, 7.8), ("FONT", (0, 0), (-1, 0), fontb, 8),
+                           ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), white),
+                           ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (7, 1), (8, -1), "CENTER"),
+                           ("GRID", (0, 0), (-1, -1), .4, HexColor("#d6dce6")),
+                           ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, HexColor("#f6f8fb")])]))
+    story += [t, Spacer(1, 26)]
+    sig = Table([[sh("Le directeur de l'établissement"), sh("Reçu par (nom, date, signature et cachet)")],
+                 [sh(centre.get("director_name") or ""), ""], ["", ""]], colWidths=[(W - 48) / 2] * 2, rowHeights=[16, 16, 50])
+    sig.setStyle(TableStyle([("FONT", (0, 0), (-1, -1), font, 9), ("FONT", (0, 0), (-1, 0), fontb, 9),
+                             ("TEXTCOLOR", (0, 0), (-1, -1), NAVY), ("BOX", (1, 0), (1, -1), .6, HexColor("#b8c2d3"))]))
+    story.append(sig)
+    doc.build(story, onFirstPage=frame, onLaterPages=frame)
+    return buf.getvalue()

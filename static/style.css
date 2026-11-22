@@ -149,3 +149,4 @@ select,input,textarea{max-width:100%}
 @media(max-width:600px){.head{flex-wrap:wrap}.head>form,.head>.row{width:100%;max-width:100%;min-width:0}.head select{width:100%!important;max-width:100%}}
 
 .pub.wide{max-width:1180px}.pubhead .in.wide{max-width:1180px}
+.btn.disabled{opacity:.5;pointer-events:none}

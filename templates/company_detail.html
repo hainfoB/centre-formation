@@ -3,7 +3,7 @@
 <h1>{% if co.kind == 'group' %}<i class="bi bi-diagram-3" style="color:var(--orange)"></i> {% endif %}{{ co.name }}</h1>
 <div class="small muted">{{ L[co.kind] }}{% if co.sector %} · {{ co.sector }}{% endif %} · {{ employees|length }} {{ _("salarié(s)") }}{% if children %} · {{ children|length }} {{ _("structure(s)") }}{% endif %}</div></div>
 <div class="row"><a class="btn sm ghost" href="{{ url_for('rh_home', cid=co.id) }}" target="_blank" rel="noopener"><i class="bi bi-eye"></i> {{ _("Voir l'espace RH") }}</a></div></div>
-<div class="tabs">{% for k, n, i in (('suivi',_('Émargement'),'clipboard-data'),('salaries',_('Salariés'),'people'),('rh',_('Accès RH & rapports'),'envelope-at'),('fiche',_('Fiche'),'building')) %}<a href="?tab={{ k }}" class="{{ 'on' if tab==k }}"><i class="bi bi-{{ i }}"></i> {{ n }}</a>{% endfor %}</div>
+<div class="tabs">{% for k, n, i in (('suivi',_('Émargement'),'clipboard-data'),('attestations',_('Attestations'),'award'),('salaries',_('Salariés'),'people'),('rh',_('Accès RH & rapports'),'envelope-at'),('fiche',_('Fiche'),'building')) %}<a href="?tab={{ k }}" class="{{ 'on' if tab==k }}"><i class="bi bi-{{ i }}"></i> {{ n }}</a>{% endfor %}</div>
 
 {% if tab == 'suivi' %}
 {% with keep={'tab':'suivi'} %}{% include "_period.html" %}{% endwith %}
@@ -13,6 +13,35 @@
 <form method="post" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="send_report"><input type="hidden" name="p" value="{{ p }}"><input type="hidden" name="d1" value="{{ d1 or '' }}"><input type="hidden" name="d2" value="{{ d2 or '' }}"><input type="hidden" name="formation_id" value="{{ fid or '' }}">
 <button class="btn sm o" {{ 'disabled title=' ~ _('Ajoutez un email RH') if not co.emails() }}><i class="bi bi-send"></i> {{ _("Envoyer aux RH") }}</button></form></div>
 {% set detail_tpl = url_for('rh_formation', fid=0, cid=co.id) %}{% include "_att_blocks.html" %}
+
+{% elif tab == 'attestations' %}
+{% set okc = certs|selectattr('ok')|list %}
+<form class="row toolbar" method="get" style="gap:8px;align-items:end;flex-wrap:wrap"><input type="hidden" name="tab" value="attestations">
+{% if scope_cos|length > 1 %}<div><label class="xs">{{ _("Structure") }}</label><select name="structure"><option value="">{{ _("Tout le groupe") }}</option>{% for s in scope_cos %}<option value="{{ s.id }}" {{ 'selected' if structure==s.id }}>{{ s.name }}</option>{% endfor %}</select></div>{% endif %}
+<div><label class="xs">{{ _("Formation") }}</label><select name="formation_id"><option value="">{{ _("Toutes") }}</option>{% for f in all_formations if f.is_pro %}<option value="{{ f.id }}" {{ 'selected' if fid==f.id }}>{{ f.title }}</option>{% endfor %}</select></div>
+<button class="btn sm"><i class="bi bi-funnel"></i> {{ _("Afficher") }}</button></form>
+<div class="grid g3" style="margin:14px 0">
+<div class="kpi" style="border-top-color:#16a34a"><span>{{ _("Attestations disponibles") }}</span><b>{{ okc|length }}</b></div>
+<div class="kpi"><span>{{ _("Non disponibles") }}</span><b>{{ certs|length - okc|length }}</b></div>
+<div class="kpi o"><span>{{ _("Déjà numérotées") }}</span><b>{{ okc|selectattr('enr.cert_no')|list|length }}</b></div></div>
+{% set q = dict(structure=structure, formation_id=fid) %}
+<div class="card"><h2 style="margin:0 0 4px"><i class="bi bi-box-seam" style="color:var(--orange)"></i> {{ _("Préparer l'envoi") }}</h2>
+<p class="small muted" style="margin:0 0 12px">{{ _("Chaque lot contient un bordereau d'envoi (liste, n° d'attestation, signature de réception) et les attestations numérotées avec QR de vérification.") }}</p>
+<div class="row" style="gap:8px;flex-wrap:wrap">
+<a class="btn {{ 'disabled' if not okc }}" href="{{ url_for('company_certificates', cid=co.id, kind='pdf', **q) }}"><i class="bi bi-file-earmark-pdf"></i> {{ _("Un seul PDF à imprimer") }}</a>
+<a class="btn {{ 'disabled' if not okc }}" href="{{ url_for('company_certificates', cid=co.id, kind='zip', **q) }}"><i class="bi bi-file-earmark-zip"></i> {{ _("ZIP : un PDF par salarié") }}</a>
+<a class="btn ghost {{ 'disabled' if not okc }}" href="{{ url_for('company_certificates', cid=co.id, kind='slip', **q) }}"><i class="bi bi-list-check"></i> {{ _("Bordereau d'envoi seul") }}</a></div>
+<form method="post" action="{{ url_for('company_certificates_send', cid=co.id) }}" class="row" style="gap:8px;margin-top:14px;align-items:end;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:12px">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="structure" value="{{ structure or '' }}"><input type="hidden" name="formation_id" value="{{ fid or '' }}">
+<div><label class="xs">{{ _("Envoyer par email à") }}</label><div class="small"><b>{{ co.emails()|join(', ') or _('Ajoutez un email RH') }}</b></div></div>
+<div><label class="xs">{{ _("Format") }}</label><select name="fmt"><option value="pdf">{{ _("PDF unique + bordereau") }}</option><option value="zip">{{ _("ZIP + bordereau") }}</option></select></div>
+<button class="btn o" {{ 'disabled' if not okc or not co.emails() }}><i class="bi bi-send"></i> {{ _("Envoyer les attestations") }}</button></form></div>
+<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ _("Détail par salarié") }}</h2><input data-filter="certt" placeholder="{{ _('Filtrer…') }}" style="max-width:240px"></div>
+<div class="tw" style="margin-top:8px"><table id="certt"><thead><tr><th>{{ _("Salarié") }}</th>{% if scope_cos|length > 1 %}<th>{{ _("Structure") }}</th>{% endif %}<th>{{ _("Formation") }}</th><th class="center">{{ _("Assiduité") }}</th><th>{{ _("État") }}</th><th></th></tr></thead><tbody>
+{% for x in certs %}<tr data-row><td><b>{{ x.student.full_name }}</b><div class="xs muted">{{ x.student.job_title or '' }}{% if x.student.employee_no %} · {{ x.student.employee_no }}{% endif %}</div></td>{% if scope_cos|length > 1 %}<td class="small">{{ x.structure }}</td>{% endif %}<td class="small">{{ x.formation.title }}</td>
+<td class="center small">{{ x.stats.rate or 0 }} %</td><td>{% if x.ok %}<span class="badge b-paid">{{ x.enr.cert_no or _("Disponible") }}</span>{% else %}<span class="badge b-due">{{ x.why }}</span>{% endif %}</td>
+<td>{% if x.ok %}<a class="btn sm ghost" href="{{ url_for('certificate_admin', eid=x.enr.id) }}"><i class="bi bi-download"></i></a>{% endif %}</td></tr>
+{% else %}<tr><td colspan="6" class="empty"><i class="bi bi-award"></i>{{ _("Aucune formation suivie pour le moment.") }}</td></tr>{% endfor %}</tbody></table></div></div>
 
 {% elif tab == 'salaries' %}
 <div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ _("Salariés") }} ({{ employees|length }})</h2><input data-filter="emp" placeholder="{{ _('Filtrer…') }}" style="max-width:240px"></div>

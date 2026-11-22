@@ -20,7 +20,7 @@ from tenancy import unscoped
 MAIL_KEYS = ("mode", "host", "port", "security", "user", "password", "api_key", "from_email", "from_name", "reply_to")
 SECRET_KEYS = ("password", "api_key")
 CODES = {"present": "P", "late": "R", "absent": "A", "excused": "E"}
-RH_ENDPOINTS = {"rh_home", "rh_report", "rh_formation", "rh_certificate", "logout", "login", "account", "static"}
+RH_ENDPOINTS = {"rh_home", "rh_report", "rh_formation", "rh_certificate", "rh_certificates", "logout", "login", "account", "static"}
 
 
 def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with the main module)
@@ -561,7 +561,10 @@ def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with t
                                counts=counts, children=co.children(), rh_users=User.query.filter_by(role="rh", company_id=co.id).all(),
                                logs=EmailLog.query.filter_by(company_id=co.id).order_by(EmailLog.id.desc()).limit(10).all(),
                                p=p, d1=d1, d2=d2, fid=fid, fos=fos, period=period_text(d1, d2), tab=request.args.get("tab", "suivi"),
-                               freqs=REPORT_FREQS, all_formations=Formation.query.order_by(Formation.title).all())
+                               freqs=REPORT_FREQS, all_formations=Formation.query.order_by(Formation.title).all(),
+                               certs=cert_rows(cert_scope_from(co, request.args), fid) if request.args.get("tab") == "attestations" else [],
+                               structure=request.args.get("structure", type=int),
+                               scope_cos=Company.query.filter(Company.id.in_(co.scope_ids())).order_by(Company.name).all())
 
     def report_download(scope_ids, title_name, fmt, args):
         _p, d1, d2 = period_from_args(args)
@@ -612,13 +615,8 @@ def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with t
         blocks, tot = company_report(sel, d1, d2, fid)
         all_blocks, _t = company_report(allowed, None, today())
         fos = [b["formation"] for b in all_blocks]
-        certs = []
-        for b in all_blocks:
-            fo = b["formation"]
-            stats = {r["enr"].id: r for r in A["attendance_stats"](fo)["rows"]}
-            for r in b["rows"]:
-                ok, why = A["cert_eligible"](r["enr"], stats.get(r["enr"].id))
-                certs.append({"name": r["name"], "company": r["company"], "formation": fo, "enr": r["enr"], "ok": ok, "why": why})
+        certs = [{"name": x["student"].full_name, "company": x["structure"], "formation": x["formation"], "enr": x["enr"],
+                  "ok": x["ok"], "why": x["why"]} for x in cert_rows(allowed)]
         return render_template("rh_home.html", root=root, structures=Company.query.filter(Company.id.in_(allowed)).order_by(Company.name).all(),
                                sel=sel if len(sel) == 1 else None, blocks=blocks, tot=tot, p=p, d1=d1, d2=d2, fid=fid, fos=fos,
                                period=period_text(d1, d2), certs=certs, preview=current_user.role != "rh",
@@ -651,11 +649,198 @@ def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with t
         enr = Enrollment.query.get_or_404(eid)
         if enr.student.company_id not in allowed:
             abort(403)
-        ok, why = A["cert_eligible"](enr)
+        row = next((x for x in cert_rows(allowed, enr.formation_id) if x["enr"].id == enr.id), None)
+        ok, why = (row["ok"], row["why"]) if row else (False, "")
         if not ok:
             flash(_("Attestation non disponible : {why}.", why=why), "error")
             return redirect(url_for("rh_home", tab="attestations", cid=request.args.get("cid")))
         return A["certificate_response"](enr)
+
+    # ── Attestations par entreprise / groupe / structure ──────────────────────────────────────────
+    def ensure_cert_no(e):
+        if not e.cert_no:
+            e.cert_issued_on = e.cert_issued_on or today()
+            db.session.flush()
+            e.cert_no = f"ATT-{e.cert_issued_on.year}-{e.id:05d}"
+
+    def cert_rows(scope_ids, formation_id=None, only_ok=False):
+        """One row per (employee, formation) in the scope, with eligibility."""
+        studs = {s.id: s for s in Student.query.filter(Student.company_id.in_(scope_ids or [0]))}
+        cos = {c.id: c for c in Company.query.filter(Company.id.in_(scope_ids or [0]))}
+        q = Enrollment.query.filter(Enrollment.student_id.in_(list(studs) or [0]), Enrollment.status == "confirmed")
+        if formation_id:
+            q = q.filter(Enrollment.formation_id == formation_id)
+        by_fo, rows = {}, []
+        for e in q:
+            by_fo.setdefault(e.formation_id, []).append(e)
+        for fid, enrs in by_fo.items():
+            fo = db.session.get(Formation, fid)
+            stats = {r["enr"].id: r for r in A["attendance_stats"](fo)["rows"]}
+            for e in enrs:
+                st, r = studs[e.student_id], stats.get(e.id)
+                ok, why = A["cert_eligible"](e, r)
+                if ok and fo.status != "done" and (not fo.ends_on or fo.ends_on >= today()):
+                    ok, why = False, _("Formation en cours (fin le {d})", d=fo.ends_on.strftime("%d/%m/%Y") if fo.ends_on else "—")
+                if only_ok and not ok:
+                    continue
+                co = cos.get(st.company_id)
+                rows.append({"enr": e, "student": st, "formation": fo, "stats": r or {}, "ok": ok, "why": why,
+                             "company": co, "structure": co.name if co else ""})
+        rows.sort(key=lambda x: (x["structure"].lower(), x["formation"].title.lower(), x["student"].last_name.lower(),
+                                 x["student"].first_name.lower()))
+        return rows
+
+    def slip_rows(rows):
+        out = []
+        for x in rows:
+            fo, st, s = x["formation"], x["student"], x["stats"]
+            per = " → ".join(d.strftime("%d/%m/%Y") for d in (fo.starts_on, fo.ends_on) if d)
+            out.append({"name": st.full_name, "matricule": st.employee_no or "", "job": st.job_title or "", "structure": x["structure"],
+                        "formation": fo.title, "period": per, "hours": s.get("hours") or fo.hours_total or "",
+                        "rate": s.get("rate", 0), "cert_no": x["enr"].cert_no or ""})
+        return out
+
+    def cert_bundle(label, rows, recipients):
+        """(combined_pdf, zip_bytes, slip_pdf) for these eligible rows; numbers the certificates."""
+        import zipfile
+        from pdfs import certificate_pdf, certificates_pdf, transmittal_pdf
+        centre = Setting.all()
+        for x in rows:
+            ensure_cert_no(x["enr"])
+        db.session.commit()
+        base = A["base_url"]()
+        items = [(x["student"], x["formation"], x["enr"], x["stats"], f"{base}/verifier/{x['enr'].token}") for x in rows]
+        ref = f"BE-{today():%Y%m%d}-{len(rows):03d}{(rows[0]['company'].id if rows and rows[0]['company'] else 0):03d}"
+        slip = transmittal_pdf(centre, label, recipients, slip_rows(rows), A["local_now"]().strftime("%d/%m/%Y %H:%M"), ref)
+        combined = certificates_pdf(centre, items) if items else b""
+        zbuf = io.BytesIO()
+        with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("00_bordereau_envoi.pdf", slip)
+            for x, it in zip(rows, items):
+                path = "/".join(p for p in (safe_name(x["structure"]) if x["structure"] else "Particuliers",
+                                            safe_name(x["formation"].title)) if p)
+                z.writestr(f"{path}/attestation_{safe_name(x['student'].last_name)}_{safe_name(x['student'].first_name)}.pdf",
+                           certificate_pdf(centre, *it))
+        return combined, zbuf.getvalue(), slip, ref
+
+    def cert_scope_from(co, args):
+        allowed = co.scope_ids()
+        sel = args.get("structure", type=int)
+        return [sel] if sel in allowed else allowed
+
+    def cert_download(label, rows, recipients, kind):
+        rows = [x for x in rows if x["ok"]]
+        if not rows:
+            flash(_("Aucun salarié ne remplit encore les conditions de l'attestation."), "error")
+            return redirect(request.referrer or url_for("rh_home" if current_user.role == "rh" else "dashboard", tab="attestations"))
+        combined, zbytes, slip, ref = cert_bundle(label, rows, recipients)
+        log("certificates_company", f"{label} ({len(rows)}, {kind})")
+        db.session.commit()
+        name = f"attestations_{safe_name(label)}_{today():%Y%m%d}"
+        if kind == "zip":
+            return send_file(io.BytesIO(zbytes), mimetype="application/zip", download_name=name + ".zip")
+        if kind == "slip":
+            return send_file(io.BytesIO(slip), mimetype="application/pdf", download_name=f"bordereau_{safe_name(label)}.pdf")
+        return send_file(io.BytesIO(combined), mimetype="application/pdf", download_name=name + ".pdf")
+
+    def send_certificates(co, rows, fmt="pdf"):
+        rows = [x for x in rows if x["ok"]]
+        to = co.emails()
+        if not to:
+            return False, _("Aucun email RH renseigné pour cette entreprise.")
+        if not rows:
+            return False, _("Aucun salarié ne remplit encore les conditions de l'attestation.")
+        combined, zbytes, slip, ref = cert_bundle(co.name, rows, to)
+        c = A["centre_settings"]()
+        name = f"attestations_{safe_name(co.name)}_{today():%Y%m%d}"
+        files = [(f"bordereau_{ref}.pdf", slip, "application/pdf")]
+        files.append((name + ".zip", zbytes, "application/zip") if fmt == "zip" else (name + ".pdf", combined, "application/pdf"))
+        fos = sorted({x["formation"].title for x in rows})
+        paras = [_("Bonjour,"),
+                 _("Veuillez trouver ci-joint {n} attestation(s) de formation des salariés de <b>{c}</b>, accompagnées du bordereau d'envoi n° {r}.",
+                   n=len(rows), c=co.name, r=ref),
+                 _("Formation(s) : {f}.", f=", ".join(fos)),
+                 _("Chaque attestation porte un QR code qui permet d'en vérifier l'authenticité en ligne.")]
+        html = notify.html_mail(c["centre_name"], _("Attestations de formation"), paras,
+                                (_("Consulter sur la plateforme"), A["base_url"]() + url_for("login")))
+        ok, err = send_logged(to, _("Attestations de formation — {c} ({n})", c=co.name, n=len(rows)),
+                              re.sub("<[^>]+>", "", "\n".join(paras)), html, attachments=files, kind="certificates", company_id=co.id)
+        return ok, err
+
+    @app.route("/entreprises/<int:cid>/attestations.<kind>")
+    @role_required("manage")
+    def company_certificates(cid, kind):
+        co = Company.query.get_or_404(cid)
+        if kind not in ("pdf", "zip", "slip"):
+            abort(404)
+        scope = cert_scope_from(co, request.args)
+        label = co.name if len(scope) > 1 else db.session.get(Company, scope[0]).name
+        return cert_download(label, cert_rows(scope, request.args.get("formation_id", type=int)), co.emails(), kind)
+
+    @app.route("/entreprises/<int:cid>/attestations/envoyer", methods=["POST"])
+    @role_required("manage")
+    def company_certificates_send(cid):
+        co = Company.query.get_or_404(cid)
+        f = request.form
+        rows = cert_rows(cert_scope_from(co, f), f.get("formation_id", type=int))
+        ok, err = send_certificates(co, rows, f.get("fmt", "pdf"))
+        db.session.commit()
+        flash(_("Attestations envoyées à {to}.", to=", ".join(co.emails())) if ok else _("Échec de l'envoi : {err}", err=err),
+              "success" if ok else "error")
+        return redirect(url_for("company_detail", cid=co.id, tab="attestations", formation_id=f.get("formation_id") or None,
+                                structure=f.get("structure") or None))
+
+    @app.route("/rh/attestations.<kind>")
+    @rh_required
+    def rh_certificates(kind):
+        root, allowed, sel = rh_scope()
+        if kind not in ("pdf", "zip"):
+            abort(404)
+        label = root.name if len(sel) > 1 else db.session.get(Company, sel[0]).name
+        return cert_download(label, cert_rows(sel, request.args.get("formation_id", type=int)), [], kind)
+
+    @app.route("/formations/<int:fid>/attestations-par-entreprise.zip")
+    @role_required("manage")
+    def formation_certificates_by_company(fid):
+        """One folder per company (+ « Particuliers »), each with its slip and one PDF per trainee."""
+        import zipfile
+        from pdfs import certificate_pdf, transmittal_pdf
+        fo = Formation.query.get_or_404(fid)
+        if fo.status != "done" and (not fo.ends_on or fo.ends_on >= today()):
+            flash(_("Formation en cours (fin le {d})", d=fo.ends_on.strftime("%d/%m/%Y") if fo.ends_on else "—"), "error")
+            return redirect(url_for("formation_detail", fid=fo.id, tab="assiduite"))
+        stats = A["attendance_stats"](fo)
+        centre, base = Setting.all(), A["base_url"]()
+        groups = {}
+        for r in stats["rows"]:
+            e = r["enr"]
+            if not A["cert_eligible"](e, r)[0]:
+                continue
+            ensure_cert_no(e)
+            co = db.session.get(Company, e.student.company_id) if e.student.company_id else None
+            groups.setdefault(co.name if co else "", []).append({"enr": e, "student": e.student, "formation": fo, "stats": r,
+                                                                 "company": co, "structure": co.name if co else ""})
+        if not groups:
+            flash(_("Aucun stagiaire ne remplit encore les conditions de l'attestation."), "error")
+            return redirect(url_for("formation_detail", fid=fo.id, tab="assiduite"))
+        db.session.commit()
+        zbuf = io.BytesIO()
+        with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as z:
+            for label, rows in sorted(groups.items()):
+                folder = safe_name(label) if label else "Particuliers"
+                co = rows[0]["company"]
+                z.writestr(f"{folder}/00_bordereau_envoi.pdf", transmittal_pdf(
+                    centre, label or _("Particuliers"), co.emails() if co else [], slip_rows(rows),
+                    A["local_now"]().strftime("%d/%m/%Y %H:%M"), f"BE-{today():%Y%m%d}-{fo.id}-{folder[:8].upper()}"))
+                for x in rows:
+                    z.writestr(f"{folder}/attestation_{safe_name(x['student'].last_name)}_{safe_name(x['student'].first_name)}.pdf",
+                               certificate_pdf(centre, x["student"], fo, x["enr"], x["stats"], f"{base}/verifier/{x['enr'].token}"))
+        log("certificates_by_company", f"{fo.title} ({sum(len(v) for v in groups.values())})")
+        db.session.commit()
+        return send_file(io.BytesIO(zbuf.getvalue()), mimetype="application/zip",
+                         download_name=f"attestations_par_entreprise_{fo.slug[:40]}.zip")
+
+    A["cert_rows"] = cert_rows
 
     # ── Template helpers ──────────────────────────────────────────────────────────────────────────
     @app.context_processor

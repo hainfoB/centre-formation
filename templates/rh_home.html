@@ -12,6 +12,9 @@
 <a class="btn sm" href="{{ url_for('rh_report', fmt='xlsx', **q) }}"><i class="bi bi-file-earmark-excel"></i> {{ _("Excel") }}</a></div>
 {% set detail_tpl = url_for('rh_formation', fid=0, **ck) %}{% include "_att_blocks.html" %}
 {% else %}
+<div class="row" style="gap:8px;margin:0 0 12px;flex-wrap:wrap">{% set okn = certs|selectattr('ok')|list|length %}<span class="badge b-paid">{{ okn }} {{ _("disponible(s)") }}</span><span class="grow"></span>
+<a class="btn sm {{ 'disabled' if not okn }}" href="{{ url_for('rh_certificates', kind='pdf', **ck) }}"><i class="bi bi-file-earmark-pdf"></i> {{ _("Tout télécharger (un PDF)") }}</a>
+<a class="btn sm {{ 'disabled' if not okn }}" href="{{ url_for('rh_certificates', kind='zip', **ck) }}"><i class="bi bi-file-earmark-zip"></i> {{ _("ZIP : un PDF par salarié") }}</a></div>
 <div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ _("Attestations de formation") }}</h2><input data-filter="cert" placeholder="{{ _('Filtrer…') }}" style="max-width:240px"></div>
 <div class="tw" style="margin-top:8px"><table id="cert"><thead><tr><th>{{ _("Salarié") }}</th><th>{{ _("Formation") }}</th><th>{{ _("État") }}</th><th></th></tr></thead><tbody>
 {% for c in certs %}<tr data-row><td><b>{{ c.name }}</b>{% if structures|length > 1 %}<div class="xs muted">{{ c.company }}</div>{% endif %}</td><td class="small">{{ c.formation.title }}</td>

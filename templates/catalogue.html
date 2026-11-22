@@ -1,11 +1,114 @@
-{% extends "base.html" %}{% set public = true %}{% block title %}{{ _("Formations —") }} {{ centre.centre_name }}{% endblock %}
-{% block public %}<div class="hero"><h1>{{ _("Nos formations") }}</h1><p style="opacity:.85;margin:6px 0 0">{{ centre.centre_tagline }}</p></div>
-{% macro cards(list) %}{% for fo in list %}<a href="{{ url_for('public_form', slug=fo.slug) }}" class="card" style="display:block;text-decoration:none;color:inherit">
-<div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ fo.title }}</h2><span class="badge b-{{ fo.status }}">{{ _('Inscriptions ouvertes') if fo.status=='open' else _('En cours') }}</span></div>
-<p class="small muted" style="margin:6px 0">{{ (fo.description or '')[:180] }}</p>
-<div class="row small"><span><i class="bi bi-calendar3"></i> {{ fo.starts_on|d }}</span>{% if fo.hours_total %}<span><i class="bi bi-clock"></i> {{ fo.hours_total }} {{ _("h") }}</span>{% endif %}<span><i class="bi bi-geo-alt"></i> {{ L[fo.mode] }}</span>
-<b style="color:var(--orange)">{% if fo.is_free %}{{ _("Gratuite") }}{% else %}{{ fo.total_cost|da }}{% endif %}</b></div></a>
-{% endfor %}{% endmacro %}
-{% if pro %}<h2 style="margin:22px 0 4px"><i class="bi bi-buildings" style="color:var(--orange)"></i> {{ _("Formations pour les entreprises") }}</h2><p class="small muted" style="margin:0 0 10px">{{ _("Sessions inter-entreprises. Formations intra sur mesure : contactez-nous pour une convention.") }}</p>{{ cards(pro) }}{% endif %}
-{% if items %}<h2 style="margin:22px 0 10px"><i class="bi bi-person" style="color:var(--orange)"></i> {{ _("Formations et cours pour les particuliers") }}</h2>{{ cards(items) }}{% endif %}
-{% if not items and not pro %}<div class="card muted">{{ _("Aucune formation ouverte pour le moment.") }}</div>{% endif %}{% endblock %}
+{% extends "base.html" %}{% set public = true %}{% set wide = true %}{% block title %}{{ _("Formations —") }} {{ centre.centre_name }}{% endblock %}
+{% block public %}
+{% macro theme(fo) %}{% set t = (fo.title ~ ' ' ~ (fo.description or '')).lower() %}{%
+ if 'soud' in t %}fire|Soudage & CND{% elif 'sigma' in t or 'lean' in t or '5s' in t or 'kaizen' in t %}graph-up-arrow|Lean & amélioration{%
+ elif 'cphs' in t or 'sécurité' in t or 'hse' in t or '45001' in t or 'secour' in t %}shield-check|HSE & sécurité{%
+ elif 'électri' in t or 'habilitation' in t %}lightning-charge|Électricité{%
+ elif '9001' in t or 'qualité' in t or 'audit' in t %}patch-check|Qualité & audit{%
+ elif 'excel' in t or 'bureautique' in t or 'informatique' in t %}laptop|Bureautique & digital{%
+ elif 'math' in t %}calculator|Soutien scolaire{% elif 'physique' in t or 'bac' in t %}lightbulb|Soutien scolaire{%
+ elif 'anglais' in t or 'français' in t or 'langue' in t %}translate|Langues{% else %}mortarboard|Formation{% endif %}{% endmacro %}
+{% macro card(fo, pro=false) %}{% set th = theme(fo).split('|') %}{% set left = fo.seats_left() %}
+<a href="{{ url_for('public_form', slug=fo.slug) }}" class="cc {{ 'pro' if pro }}" data-k="{{ 'pro' if pro else 'ind' }}" data-t="{{ th[1] }}" data-s="{{ (fo.title ~ ' ' ~ (fo.audience or '') ~ ' ' ~ th[1])|lower }}">
+ <div class="cc-art"><i class="bi bi-{{ th[0] }}"></i><span class="cc-tag">{{ th[1] }}</span>
+  <span class="cc-st {{ fo.status }}">{{ _('Inscriptions ouvertes') if fo.status=='open' else _('En cours · rejoindre') }}</span></div>
+ <div class="cc-b"><h3>{{ fo.title }}</h3>
+  <p>{{ (fo.description or '')[:120] }}{{ '…' if (fo.description or '')|length > 120 }}</p>
+  <ul class="cc-m"><li><i class="bi bi-calendar3"></i> {{ fo.starts_on|d }}</li>{% if fo.hours_total %}<li><i class="bi bi-clock"></i> {{ fo.hours_total }} h</li>{% endif %}<li><i class="bi bi-{{ 'wifi' if fo.mode=='online' else 'geo-alt' }}"></i> {{ L[fo.mode] }}</li></ul>
+  {% if fo.seats %}<div class="cc-seat"><div><span style="width:{{ [100, (fo.taken() * 100 / fo.seats)|int]|min }}%"></span></div><small>{% if left == 0 %}{{ _("Complet · liste d'attente") }}{% elif left <= 4 %}<b>{{ _("Plus que {n} place(s)", n=left) }}</b>{% else %}{{ left }} {{ _("places disponibles") }}{% endif %}</small></div>{% endif %}
+  <div class="cc-f"><b>{% if fo.is_free %}{{ _("Gratuite") }}{% else %}{{ fo.total_cost|da }}{% endif %}</b><span class="cc-go">{{ _("Je m'inscris") }} <i class="bi bi-arrow-{{ 'left' if dir=='rtl' else 'right' }}"></i></span></div></div></a>{% endmacro %}
+
+<section class="ch">
+ <div class="ch-txt"><span class="ch-k"><i class="bi bi-stars"></i> {{ centre.centre_tagline }}</span>
+  <h1>{{ _("Des formations qui font progresser") }} <em>{{ _("vos équipes") }}</em> {{ _("et") }} <em>{{ _("vos enfants") }}</em>.</h1>
+  <p>{{ _("Sessions pour les entreprises, cours et soutien pour les particuliers. Inscription en ligne en deux minutes, suivi des présences et attestation vérifiable.") }}</p>
+  <label class="ch-search"><i class="bi bi-search"></i><input id="q" placeholder="{{ _('Rechercher : soudage, Six Sigma, maths, anglais…') }}" aria-label="{{ _('Rechercher une formation') }}"></label></div>
+ <div class="ch-stats">
+  <div><b data-n="{{ stats.formations }}">{{ stats.formations }}</b><span>{{ _("formations") }}</span></div>
+  <div><b data-n="{{ stats.trained }}">{{ stats.trained }}</b><span>{{ _("participants formés") }}</span></div>
+  {% if stats.companies %}<div><b data-n="{{ stats.companies }}">{{ stats.companies }}</b><span>{{ _("entreprises clientes") }}</span></div>{% endif %}
+  <div><b data-n="{{ stats.trainers }}">{{ stats.trainers }}</b><span>{{ _("formateurs experts") }}</span></div></div>
+</section>
+
+{% set themes = [] %}{% for fo in pro + items %}{% set th = theme(fo).split('|')[1] %}{% if th not in themes %}{% set _ = themes.append(th) %}{% endif %}{% endfor %}
+<nav class="chips" aria-label="{{ _('Filtrer') }}"><button class="on" data-f="all">{{ _("Tout") }}</button>{% if pro %}<button data-f="pro"><i class="bi bi-buildings"></i> {{ _("Entreprises") }}</button>{% endif %}{% if items %}<button data-f="ind"><i class="bi bi-person"></i> {{ _("Particuliers") }}</button>{% endif %}
+{% for th in themes %}<button data-f="t:{{ th }}">{{ th }}</button>{% endfor %}</nav>
+
+{% if pro %}<section class="sec" data-sec="pro"><div class="sec-h"><div><h2><i class="bi bi-buildings"></i> {{ _("Pour les entreprises") }}</h2><p>{{ _("Sessions inter-entreprises animées par des ingénieurs et consultants certifiés.") }}</p></div></div>
+<div class="grid-c">{% for fo in pro %}{{ card(fo, true) }}{% endfor %}</div>
+<div class="dom">{% for i, n, d in (('fire','Soudage & CND','Inspecteur de soudage, CSWIP, IWI'),('graph-up-arrow','Lean & Six Sigma','Yellow, Green Belt, 5S, Kaizen'),('shield-check','HSE & sécurité','CPHS, ISO 45001, SST'),('lightning-charge','Électricité','Habilitation B1V, B2V, BR'),('patch-check','Qualité & audit','ISO 9001, auditeur interne'),('laptop','Digital & gestion','Excel avancé, Power Query')) %}<div><i class="bi bi-{{ i }}"></i><b>{{ _(n) }}</b><span>{{ _(d) }}</span></div>{% endfor %}</div>
+<div class="intra"><div><b>{{ _("Une formation sur mesure pour votre entreprise ?") }}</b><span>{{ _("Soudage, Lean Six Sigma, 5S, CPHS, HSE, habilitation électrique, qualité… dans nos locaux ou sur votre site, avec émargement consultable par vos RH.") }}</span></div>
+{% if centre.centre_phone %}<a class="btn o" href="{{ wa(school.phone if school and school.phone else centre.centre_phone, _('Bonjour, nous souhaitons une formation intra-entreprise.')) }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> {{ _("Demander une offre") }}</a>{% endif %}</div></section>{% endif %}
+
+{% if items %}<section class="sec" data-sec="ind"><div class="sec-h"><div><h2><i class="bi bi-person-heart"></i> {{ _("Pour les particuliers") }}</h2><p>{{ _("Soutien scolaire, langues et compétences numériques, en petits groupes.") }}</p></div></div>
+<div class="grid-c">{% for fo in items %}{{ card(fo) }}{% endfor %}</div></section>{% endif %}
+<div class="card muted center" id="none" style="display:{{ 'none' if items or pro else 'block' }}">{{ _("Aucune formation ne correspond.") }}</div>
+
+<section class="how"><h2>{{ _("Comment ça marche") }}</h2><div class="how-g">
+ <div><span>1</span><b>{{ _("Choisissez") }}</b><p>{{ _("Ouvrez une formation, lisez le programme et le tarif.") }}</p></div>
+ <div><span>2</span><b>{{ _("Inscrivez-vous") }}</b><p>{{ _("Formulaire rapide sur téléphone, sans compte à créer.") }}</p></div>
+ <div><span>3</span><b>{{ _("Recevez votre QR") }}</b><p>{{ _("Votre espace personnel : planning, présences, paiements.") }}</p></div>
+ <div><span>4</span><b>{{ _("Obtenez l'attestation") }}</b><p>{{ _("Un PDF vérifiable en ligne par QR code.") }}</p></div></div></section>
+
+<style>
+.ch{position:relative;overflow:hidden;background:var(--navy);color:#fff;border-radius:22px;padding:42px 36px;display:grid;grid-template-columns:1.5fr 1fr;gap:28px;align-items:center;margin-bottom:18px;
+ background-image:radial-gradient(circle at 92% 8%,rgba(249,115,22,.35),transparent 38%),radial-gradient(circle at 70% 110%,rgba(249,115,22,.18),transparent 40%)}
+.ch:after{content:"";position:absolute;inset:auto -40px -60px auto;width:260px;height:260px;border:36px solid rgba(255,255,255,.04);border-radius:50%}
+.ch-k{display:inline-flex;gap:6px;align-items:center;font-size:13px;color:#ffb27a;font-weight:700}
+.ch h1{font-size:clamp(28px,4vw,44px);line-height:1.1;margin:10px 0 12px;letter-spacing:-.02em}
+.ch h1 em{font-style:normal;color:var(--orange)}
+.ch p{opacity:.85;max-width:560px;margin:0 0 18px;font-size:16px;line-height:1.55}
+.ch-search{display:flex;align-items:center;gap:10px;background:#fff;border-radius:14px;padding:4px 6px 4px 16px;max-width:520px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.ch-search i{color:var(--orange);font-size:18px}.ch-search input{border:0;outline:0;padding:12px 4px;font-size:15px;flex:1;background:transparent}
+.ch-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;position:relative;z-index:1}
+.ch-stats div{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px}
+.ch-stats b{display:block;font-size:34px;font-weight:800;color:#fff}.ch-stats span{font-size:13px;opacity:.75}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 6px}
+.chips button{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;font:700 13px Inter,sans-serif;color:var(--navy);cursor:pointer}
+.chips button.on{background:var(--navy);border-color:var(--navy);color:#fff}.chips button:focus-visible{outline:3px solid var(--orange);outline-offset:2px}
+.sec{margin-top:26px}.sec-h h2{margin:0;font-size:24px;color:var(--navy)}.sec-h h2 i{color:var(--orange)}.sec-h p{margin:4px 0 14px;color:var(--muted)}
+.grid-c{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px}
+.cc{display:flex;flex-direction:column;background:#fff;border-radius:18px;overflow:hidden;text-decoration:none;color:inherit;border:1px solid #e6ebf3;box-shadow:0 4px 14px rgba(11,37,69,.06);transition:transform .2s,box-shadow .2s}
+.cc:hover{transform:translateY(-4px);box-shadow:0 16px 34px rgba(11,37,69,.14)}.cc:focus-visible{outline:3px solid var(--orange);outline-offset:3px}
+.cc-art{position:relative;height:118px;background:linear-gradient(135deg,#123a66,var(--navy));overflow:hidden}
+.cc.pro .cc-art{background:linear-gradient(135deg,var(--navy),#1d4f86)}
+.cc:not(.pro) .cc-art{background:linear-gradient(135deg,#f97316,#fb923c)}
+.cc-art:before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.18) 1.2px,transparent 1.3px);background-size:14px 14px;opacity:.6}
+.cc-art i{position:absolute;right:16px;bottom:-14px;font-size:96px;color:rgba(255,255,255,.22);transition:transform .3s}
+.cc:hover .cc-art i{transform:rotate(-8deg) scale(1.06)}
+.cc-tag{position:absolute;left:16px;top:16px;background:rgba(255,255,255,.95);color:var(--navy);font-weight:800;font-size:12px;padding:5px 10px;border-radius:999px}
+.cc-st{position:absolute;left:16px;bottom:14px;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+.cc-st:before{content:"";width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 4px rgba(74,222,128,.25)}
+.cc-st.running:before{background:#fde047;box-shadow:0 0 0 4px rgba(253,224,71,.25)}
+.cc-b{padding:16px 18px 18px;display:flex;flex-direction:column;flex:1}.cc-b h3{margin:0 0 6px;font-size:17px;line-height:1.3;color:var(--navy)}
+.cc-b p{margin:0 0 12px;color:var(--muted);font-size:14px;line-height:1.5}
+.cc-m{list-style:none;padding:0;margin:0 0 12px;display:flex;gap:12px;flex-wrap:wrap;font-size:13px;color:#42506b}.cc-m i{color:var(--orange)}
+.cc-seat{margin:0 0 12px}.cc-seat div{height:6px;background:#eef1f6;border-radius:9px;overflow:hidden}.cc-seat span{display:block;height:100%;background:var(--orange);border-radius:9px}
+.cc-seat small{font-size:12px;color:var(--muted)}.cc-seat b{color:#dc2626}
+.cc-f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;border-top:1px dashed #e1e6ee;padding-top:12px}
+.cc-f b{font-size:18px;color:var(--navy)}.cc-go{font-weight:800;font-size:14px;color:var(--orange);display:flex;gap:6px;align-items:center}
+.cc:hover .cc-go i{transform:translateX(3px)}.cc-go i{transition:transform .2s}
+.dom{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-top:18px}.dom div{background:#fff;border:1px solid #e6ebf3;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:2px}.dom i{font-size:24px;color:var(--orange);margin-bottom:4px}.dom b{color:var(--navy);font-size:14px}.dom span{font-size:12px;color:var(--muted)}
+@media (max-width:980px){.dom{grid-template-columns:repeat(3,1fr)}}@media (max-width:520px){.dom{grid-template-columns:1fr 1fr}}
+.intra{margin-top:18px;display:flex;justify-content:space-between;align-items:center;gap:16px;background:#fff3e8;border:1.5px dashed var(--orange);border-radius:16px;padding:18px 20px}
+.intra b{display:block;color:var(--navy);font-size:16px}.intra span{font-size:14px;color:#6b4a2b}
+.how{margin-top:34px;background:#fff;border-radius:20px;padding:26px;border:1px solid #e6ebf3}.how h2{margin:0 0 16px;color:var(--navy)}
+.how-g{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}.how-g span{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--orange);color:#fff;font-weight:800;margin-bottom:8px}
+.how-g b{display:block;color:var(--navy)}.how-g p{margin:4px 0 0;font-size:14px;color:var(--muted)}
+.cc.rv{opacity:0;transform:translateY(14px)}.cc.rv.in{opacity:1;transform:none;transition:opacity .5s ease,transform .5s ease}
+@media (max-width:860px){.ch{grid-template-columns:1fr;padding:28px 20px}.how-g{grid-template-columns:1fr 1fr}.intra{flex-direction:column;align-items:flex-start}}
+@media (max-width:480px){.how-g{grid-template-columns:1fr}.ch-stats b{font-size:26px}}
+@media (prefers-reduced-motion:reduce){.cc,.cc-art i,.cc-go i{transition:none}.cc.rv{opacity:1;transform:none}}
+</style>
+<script>(function(){
+var cards=[].slice.call(document.querySelectorAll('.cc')),f='all',q='';
+var rm=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function apply(){var n=0;cards.forEach(function(c){var ok=(f==='all'||c.dataset.k===f||('t:'+c.dataset.t)===f)&&(!q||c.dataset.s.indexOf(q)>-1);c.style.display=ok?'':'none';if(ok)n++});
+ document.querySelectorAll('.sec').forEach(function(s){s.style.display=[].some.call(s.querySelectorAll('.cc'),function(c){return c.style.display!=='none'})?'':'none'});
+ document.getElementById('none').style.display=n?'none':'block'}
+document.querySelectorAll('.chips button').forEach(function(b){b.onclick=function(){document.querySelectorAll('.chips button').forEach(function(x){x.classList.remove('on')});b.classList.add('on');f=b.dataset.f;apply()}});
+document.getElementById('q').oninput=function(e){q=e.target.value.toLowerCase().trim();apply()};
+if(!rm){cards.forEach(function(c,i){c.classList.add('rv');setTimeout(function(){c.classList.add('in')},80+i*60)});
+ document.querySelectorAll('[data-n]').forEach(function(el){var t=+el.dataset.n,s=null;function step(ts){s=s||ts;var p=Math.min(1,(ts-s)/900);el.textContent=Math.round(t*(1-Math.pow(1-p,3)));if(p<1)requestAnimationFrame(step)}el.textContent='0';requestAnimationFrame(step)})}
+})();</script>
+{% endblock %}

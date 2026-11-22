@@ -1583,7 +1583,12 @@ def catalogue(sslug):
     items = (Formation.query.filter(Formation.status.in_(("open", "running")), Formation.client_company_id.is_(None))
              .order_by(Formation.starts_on).all())
     pro = [f for f in items if f.for_companies]
-    return render_template("catalogue.html", items=[f for f in items if not f.for_companies], pro=pro)
+    stats = {"formations": Formation.query.filter(Formation.status != "draft").count(),
+             "trainers": User.query.filter_by(role="formateur", active=True).count(),
+             "trained": Enrollment.query.filter_by(status="confirmed").count(),
+             "companies": Company.query.filter(Company.kind == "company").count(),
+             "hours": sum(f.hours_total or 0 for f in Formation.query.filter(Formation.status != "draft"))}
+    return render_template("catalogue.html", items=[f for f in items if not f.for_companies], pro=pro, stats=stats)
 
 
 @app.route("/f/<slug>", methods=["GET", "POST"])

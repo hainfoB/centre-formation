@@ -61,8 +61,8 @@
   {% block content %}{% endblock %}
 </main></div>
 {% else %}
-<header class="pubhead noprint"><div class="in"><span class="row" style="gap:10px">{{ brandmark(32) }}<b>{{ centre.centre_name }}</b></span><span class="row" style="gap:12px"><span class="publang">{% for code, name in LANGS.items() %}<a href="{{ lang_url(code) }}" class="{{ 'on' if lang==code }}" lang="{{ code }}">{{ name }}</a>{% endfor %}</span>{% if centre.centre_phone %}<a class="small" style="color:#fff;opacity:.85;text-decoration:none" href="tel:{{ centre.centre_phone|replace(' ','') }}"><i class="bi bi-telephone"></i> {{ (centre.centre_phone)|ltr }}</a>{% endif %}</span></div></header>
-<main class="pub" id="main">
+<header class="pubhead noprint"><div class="in{{ ' wide' if wide }}"><span class="row" style="gap:10px">{{ brandmark(32) }}<b>{{ centre.centre_name }}</b></span><span class="row" style="gap:12px"><span class="publang">{% for code, name in LANGS.items() %}<a href="{{ lang_url(code) }}" class="{{ 'on' if lang==code }}" lang="{{ code }}">{{ name }}</a>{% endfor %}</span>{% if centre.centre_phone %}<a class="small" style="color:#fff;opacity:.85;text-decoration:none" href="tel:{{ centre.centre_phone|replace(' ','') }}"><i class="bi bi-telephone"></i> {{ (centre.centre_phone)|ltr }}</a>{% endif %}</span></div></header>
+<main class="pub{{ ' wide' if wide }}" id="main">
   <div class="flashes" aria-live="polite">{% with msgs = get_flashed_messages(with_categories=true) %}{% for c, m in msgs %}<div class="flash {{ c }}"><i class="bi {{ 'bi-check-circle-fill' if c=='success' else 'bi-exclamation-triangle-fill' }}"></i><span>{{ m }}</span></div>{% endfor %}{% endwith %}</div>
   {% block public %}{% endblock %}
   <p class="xs muted center" style="margin-top:30px">{{ centre.centre_name }}{% if centre.centre_address %} · {{ centre.centre_address }}{% endif %}{% if centre.centre_agrement %} · {{ _("Agrément") }} {{ (centre.centre_agrement)|ltr }}{% endif %}</p>

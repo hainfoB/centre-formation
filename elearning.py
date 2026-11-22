@@ -290,7 +290,7 @@ def register(app, A):  # noqa: C901
             a.completion = f.get("completion") if f.get("completion") in ("view", "manual", "none", "auto") else "view"
             if a.kind == "label":
                 a.completion = "none"
-            if a.kind in ("quiz", "assign", "forum", "poll") and A.get("save_activity_opts"):
+            if a.kind in ("quiz", "assign", "forum", "poll", "live") and A.get("save_activity_opts"):
                 A["save_activity_opts"](a, f)
             a.available_from = A["parse_date"](f.get("available_from"))
             a.visible = not f.get("hidden")
@@ -302,7 +302,7 @@ def register(app, A):  # noqa: C901
                     db.session.rollback()
                     flash(_("Choisissez un fichier."), "error")
                     return redirect(request.url)
-            if a.kind in ("video", "url") and not a.url and not (a.kind == "video" and a.file_id):
+            if a.kind in ("video", "url", "live") and not a.url and not (a.kind == "video" and a.file_id):
                 db.session.rollback()
                 flash(_("Indiquez l'adresse (URL)."), "error")
                 return redirect(request.url)
@@ -375,8 +375,9 @@ def register(app, A):  # noqa: C901
         pr = progress(c, enr)
         secs = section_states(c, pr)
         nxt = next((a for s, acts, locked, _x in secs if not locked for a in acts
-                    if a.kind != "label" and a.id not in pr["done_ids"] and (not a.available_from or a.available_from <= today())), None)
-        return render_template("learn_course.html", enr=enr, c=c, pr=pr, secs=secs, nxt=nxt, preview=prev, today_=today())
+                    if a.kind != "label" and a.completion != "none" and a.id not in pr["done_ids"] and (not a.available_from or a.available_from <= today())), None)
+        award = A["check_award"](c, enr) if A.get("check_award") and not prev else None
+        return render_template("learn_course.html", enr=enr, c=c, pr=pr, secs=secs, nxt=nxt, preview=prev, today_=today(), award=award)
 
     def ordered_open(c, enr, pr):
         secs = section_states(c, pr)
@@ -422,6 +423,8 @@ def register(app, A):  # noqa: C901
             return redirect(url_for("learn_course", token=token, cid=c.id))
         if a.kind in ("quiz", "assign"):
             return redirect(url_for("learn_eval", token=token, aid=a.id, apercu=1 if prev else None))
+        if a.kind == "live":
+            return redirect(url_for("learn_live", token=token, aid=a.id, apercu=1 if prev else None))
         if a.kind in ("forum", "poll"):
             return redirect(url_for("learn_forum" if a.kind == "forum" else "learn_poll", token=token, aid=a.id,
                                     apercu=1 if prev else None))

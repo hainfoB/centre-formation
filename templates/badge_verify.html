@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ _("Vérification du badge") }}{% endblock %}{% block public %}
+{% if d %}<div class="card center" style="border-top:5px solid #16a34a;padding:28px"><div style="font-size:54px;color:var(--orange)"><i class="bi bi-award-fill"></i></div>
+<div class="badge b-paid" style="font-size:14px"><i class="bi bi-patch-check-fill"></i> {{ _("Badge authentique") }}</div>
+<h1 style="color:var(--navy);margin:14px 0 4px">{{ d.name }}</h1><p class="muted" style="margin:0 0 14px">{{ _("a obtenu le badge") }}</p>
+<h2 style="color:var(--orange);margin:0">{{ d.badge }}</h2><p class="small" style="margin:6px 0 0">{{ d.course }} · {{ d.formation }}</p>
+<p class="small muted">{{ d.school }} · {{ _("délivré le") }} {{ d.date.strftime('%d/%m/%Y') }}{% if d.grade is not none %} · {{ _("moyenne") }} {{ (d.grade/5)|num }} / 20{% endif %}</p><p class="xs muted">N° {{ d.code|upper }}</p></div>
+{% else %}<div class="card center" style="border-top:5px solid #dc2626"><h1>{{ _("Badge introuvable") }}</h1><p class="muted">{{ _("Ce code ne correspond à aucun badge délivré.") }}</p></div>{% endif %}
+{% endblock %}

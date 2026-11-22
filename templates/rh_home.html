@@ -3,7 +3,7 @@
 <div class="head"><div><div class="xs muted">{{ _("Espace RH") }} · {{ centre.centre_name }}</div><h1>{{ root.name }}</h1>
 <div class="small muted">{{ _("Suivi de la formation de vos salariés : présences, assiduité et attestations.") }}</div></div></div>
 {% set ck = {'cid': root.id if preview else None} %}
-<div class="tabs">{% for k, n, i in (('suivi',_('Émargement & assiduité'),'clipboard-data'),('attestations',_('Attestations'),'award')) %}<a href="{{ url_for('rh_home', tab=k, **ck) }}" class="{{ 'on' if tab==k }}"><i class="bi bi-{{ i }}"></i> {{ n }}</a>{% endfor %}</div>
+<div class="tabs">{% for k, n, i in (('suivi',_('Émargement & assiduité'),'clipboard-data'),('elearning',_('E-learning'),'laptop'),('attestations',_('Attestations'),'award')) %}<a href="{{ url_for('rh_home', tab=k, **ck) }}" class="{{ 'on' if tab==k }}"><i class="bi bi-{{ i }}"></i> {{ n }}</a>{% endfor %}</div>
 {% if tab == 'suivi' %}
 {% with keep={'tab':'suivi','cid': ck.cid} %}{% include "_period.html" %}{% endwith %}
 <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><b class="small">{{ period }}</b><span class="grow"></span>
@@ -11,6 +11,7 @@
 <a class="btn sm" href="{{ url_for('rh_report', fmt='pdf', **q) }}"><i class="bi bi-file-earmark-pdf"></i> {{ _("Télécharger l'émargement (PDF)") }}</a>
 <a class="btn sm" href="{{ url_for('rh_report', fmt='xlsx', **q) }}"><i class="bi bi-file-earmark-excel"></i> {{ _("Excel") }}</a></div>
 {% set detail_tpl = url_for('rh_formation', fid=0, **ck) %}{% include "_att_blocks.html" %}
+{% elif tab == 'elearning' %}{% set show_co = structures|length > 1 %}{% include "_elearning_rh.html" %}
 {% else %}
 <div class="row" style="gap:8px;margin:0 0 12px;flex-wrap:wrap">{% set okn = certs|selectattr('ok')|list|length %}<span class="badge b-paid">{{ okn }} {{ _("disponible(s)") }}</span><span class="grow"></span>
 <a class="btn sm {{ 'disabled' if not okn }}" href="{{ url_for('rh_certificates', kind='pdf', **ck) }}"><i class="bi bi-file-earmark-pdf"></i> {{ _("Tout télécharger (un PDF)") }}</a>

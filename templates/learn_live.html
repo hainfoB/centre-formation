@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% set public = true %}{% block title %}{{ a.title }}{% endblock %}{% block public %}{% include "_learn_head.html" %}
+<article class="card" style="margin-top:10px;text-align:center"><div style="font-size:46px;color:#15803d"><i class="bi bi-camera-video-fill"></i></div><div class="xs" style="color:#15803d;font-weight:700">{{ _("Classe virtuelle") }}</div>
+<h1 style="font-size:24px;color:var(--navy);margin:6px 0">{{ a.title }}</h1>
+{% if start %}<p style="font-size:17px;margin:4px 0"><b>{{ start.strftime('%d/%m/%Y') }}</b> · {{ start.strftime('%H:%M') }} – {{ end.strftime('%H:%M') }}</p>{% endif %}
+{% if a.body %}<div class="small" style="text-align:start;margin:10px 0">{{ a.body|md }}</div>{% endif %}
+{% if att %}<p class="badge b-paid" style="font-size:14px"><i class="bi bi-check2-circle"></i> {{ _("Présence enregistrée") }} ({{ _("en retard") if att.status == 'late' else _("à l'heure") }})</p>{% endif %}
+{% if is_open %}<form method="post" style="margin-top:14px">{% if not preview %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}<button class="btn o" style="font-size:18px;padding:14px 28px" {{ 'disabled' if preview }}><i class="bi bi-box-arrow-in-right"></i> {{ _("Rejoindre la classe") }}</button></form>
+<p class="xs muted">{{ _("En rejoignant, votre présence est automatiquement pointée dans l'émargement.") }}</p>
+{% elif start and now < start %}<p class="small muted" style="margin-top:12px">{{ _("Le bouton « Rejoindre » s'active 15 minutes avant le début.") }}</p><div id="cd" style="font-size:30px;font-weight:800;color:var(--navy)"></div>
+<script>(function(){var t={{ secs }},el=document.getElementById('cd');function f(){if(t<=900){location.reload();return}var d=Math.floor(t/86400),h=Math.floor(t%86400/3600),m=Math.floor(t%3600/60);el.textContent=(d?d+' j ':'')+h+' h '+(m<10?'0':'')+m+' min';t-=30;setTimeout(f,30000)}f()})();</script>
+{% else %}<p class="small muted" style="margin-top:12px">{{ _("Cette classe virtuelle est terminée.") }}</p>{% endif %}</article>
+{% endblock %}

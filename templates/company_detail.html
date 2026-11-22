@@ -3,7 +3,7 @@
 <h1>{% if co.kind == 'group' %}<i class="bi bi-diagram-3" style="color:var(--orange)"></i> {% endif %}{{ co.name }}</h1>
 <div class="small muted">{{ L[co.kind] }}{% if co.sector %} · {{ co.sector }}{% endif %} · {{ employees|length }} {{ _("salarié(s)") }}{% if children %} · {{ children|length }} {{ _("structure(s)") }}{% endif %}</div></div>
 <div class="row"><a class="btn sm ghost" href="{{ url_for('rh_home', cid=co.id) }}" target="_blank" rel="noopener"><i class="bi bi-eye"></i> {{ _("Voir l'espace RH") }}</a></div></div>
-<div class="tabs">{% for k, n, i in (('suivi',_('Émargement'),'clipboard-data'),('attestations',_('Attestations'),'award'),('salaries',_('Salariés'),'people'),('rh',_('Accès RH & rapports'),'envelope-at'),('fiche',_('Fiche'),'building')) %}<a href="?tab={{ k }}" class="{{ 'on' if tab==k }}"><i class="bi bi-{{ i }}"></i> {{ n }}</a>{% endfor %}</div>
+<div class="tabs">{% for k, n, i in (('suivi',_('Émargement'),'clipboard-data'),('attestations',_('Attestations'),'award'),('elearning',_('E-learning'),'laptop'),('salaries',_('Salariés'),'people'),('rh',_('Accès RH & rapports'),'envelope-at'),('fiche',_('Fiche'),'building')) %}<a href="?tab={{ k }}" class="{{ 'on' if tab==k }}"><i class="bi bi-{{ i }}"></i> {{ n }}</a>{% endfor %}</div>
 
 {% if tab == 'suivi' %}
 {% with keep={'tab':'suivi'} %}{% include "_period.html" %}{% endwith %}
@@ -43,6 +43,7 @@
 <td>{% if x.ok %}<a class="btn sm ghost" href="{{ url_for('certificate_admin', eid=x.enr.id) }}"><i class="bi bi-download"></i></a>{% endif %}</td></tr>
 {% else %}<tr><td colspan="6" class="empty"><i class="bi bi-award"></i>{{ _("Aucune formation suivie pour le moment.") }}</td></tr>{% endfor %}</tbody></table></div></div>
 
+{% elif tab == 'elearning' %}{% set show_co = children|length > 0 %}{% include "_elearning_rh.html" %}
 {% elif tab == 'salaries' %}
 <div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ _("Salariés") }} ({{ employees|length }})</h2><input data-filter="emp" placeholder="{{ _('Filtrer…') }}" style="max-width:240px"></div>
 <form method="post" id="empf"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="tab" value="salaries">

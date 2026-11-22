@@ -564,6 +564,7 @@ def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with t
                                freqs=REPORT_FREQS, all_formations=Formation.query.order_by(Formation.title).all(),
                                certs=cert_rows(cert_scope_from(co, request.args), fid) if request.args.get("tab") == "attestations" else [],
                                structure=request.args.get("structure", type=int),
+                               el=A["elearning_rows"](co.scope_ids()) if request.args.get("tab") == "elearning" and A.get("elearning_rows") else [],
                                scope_cos=Company.query.filter(Company.id.in_(co.scope_ids())).order_by(Company.name).all())
 
     def report_download(scope_ids, title_name, fmt, args):
@@ -620,7 +621,8 @@ def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with t
         return render_template("rh_home.html", root=root, structures=Company.query.filter(Company.id.in_(allowed)).order_by(Company.name).all(),
                                sel=sel if len(sel) == 1 else None, blocks=blocks, tot=tot, p=p, d1=d1, d2=d2, fid=fid, fos=fos,
                                period=period_text(d1, d2), certs=certs, preview=current_user.role != "rh",
-                               tab=request.args.get("tab", "suivi"))
+                               tab=request.args.get("tab", "suivi"),
+                               el=A["elearning_rows"](sel) if request.args.get("tab") == "elearning" and A.get("elearning_rows") else [])
 
     @app.route("/rh/emargement.<fmt>")
     @rh_required

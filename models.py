@@ -442,7 +442,7 @@ class PlatformSetting(db.Model):
 
 
 # ── E-learning (type Moodle) ──────────────────────────────────────────────────────────────────────
-ACTIVITY_KINDS = ("page", "file", "video", "url", "label", "quiz", "assign", "forum", "poll")
+ACTIVITY_KINDS = ("page", "file", "video", "url", "label", "quiz", "assign", "forum", "poll", "live")
 QTYPES = ("mcq", "multi", "tf", "short", "numeric", "match")
 
 
@@ -454,6 +454,18 @@ class Course(Tenant, db.Model):
     summary = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(10), default="draft")          # draft | published
     sequential = db.Column(db.Boolean, default=False)           # each section unlocks when the previous one is done
+    settings = db.Column(db.Text, nullable=True)                # JSON: badge / completion certificate
+
+    def opts(self):
+        import json
+        try:
+            return json.loads(self.settings or "{}")
+        except ValueError:
+            return {}
+
+    def set_opts(self, d):
+        import json
+        self.settings = json.dumps(d, ensure_ascii=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     formation = db.relationship("Formation")
     sections = db.relationship("CourseSection", backref="course", order_by="CourseSection.position",
@@ -612,3 +624,14 @@ class PollResponse(Tenant, db.Model):
     answers = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (db.UniqueConstraint("activity_id", "enrollment_id", name="uq_poll"),)
+
+
+class CourseAward(Tenant, db.Model):
+    """Badge + e-learning completion certificate, issued automatically when the course is completed."""
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False, index=True)
+    enrollment_id = db.Column(db.Integer, db.ForeignKey("enrollment.id"), nullable=False, index=True)
+    code = db.Column(db.String(24), unique=True, nullable=False, default=lambda: _tok()[:16])
+    grade = db.Column(db.Float, nullable=True)          # average /100 at issue time
+    issued_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("course_id", "enrollment_id", name="uq_award"),)

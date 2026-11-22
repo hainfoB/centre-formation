@@ -19,7 +19,7 @@ from sqlalchemy import func, or_
 
 from flask import g
 from models import (CASH_IN, CASH_OUT, FORMATION_STATUSES, PAY_METHODS, PLANS, ROLES, Attendance, AuditLog, CashEntry,
-                    Enrollment, Formation, LicenseKey, Payment, School, Seance, Setting, Student, User, db)
+                    Enrollment, Formation, LicenseKey, Payment, School, Seance, Setting, Student, User, Company, db)
 import tenancy
 from tenancy import as_school, unscoped
 from notify import html_mail, send_email, wa_link
@@ -220,7 +220,9 @@ LABELS = Labels({
     "due": "À payer", "paid": "Payé", "waived": "Exonéré", "overdue": "En retard",
     "cash": "Espèces", "ccp": "CCP", "virement": "Virement", "cheque": "Chèque", "autre": "Autre",
     "onsite": "Présentiel", "online": "En ligne", "hybrid": "Hybride",
-    "admin": "Administrateur", "secretaire": "Secrétariat", "formateur": "Formateur",
+    "admin": "Administrateur", "secretaire": "Secrétariat", "formateur": "Formateur", "rh": "Responsable RH",
+    "none": "Pas d'envoi automatique", "weekly": "Chaque lundi (semaine écoulée)", "monthly": "Le 1er du mois (mois écoulé)", "end": "À la fin de chaque formation",
+    "group": "Groupe", "company": "Entreprise / structure",
     "ticket": "QR ticket", "room": "QR salle", "code": "Code", "manual": "Manuel",
     "in": "Entrée", "out": "Sortie", "fees": "Frais de formation",
     "salaire": "Salaires enseignants", "loyer": "Loyer", "energie": "Électricité, eau, gaz", "telecom": "Internet et téléphone",
@@ -246,7 +248,7 @@ def inject():
     return {"_": _, "lang": lang, "dir": "rtl" if lang == "ar" else "ltr", "LANGS": LANGS,
             "lang_url": lambda code: request.path + "?" + urlencode({**args, "lang": code}),
             "nav": nav, "L": LABELS, "centre": centre_settings(), "today": today(), "fmt_da": fmt_da, "wa": wa_link,
-            "email_on": bool(os.environ.get("BREVO_API_KEY") or os.environ.get("SMTP_HOST")),
+            "email_on": (globals().get("mail_status") or (lambda: (False, "")))()[0],
             "roles": ROLES, "pay_methods": PAY_METHODS, "statuses": FORMATION_STATUSES,
             "school": g.get("school"), "lic": licence_info(g.get("school")), "LOCAL": LOCAL}
 
@@ -517,6 +519,20 @@ def apply_student_form(st, f):
         st.birth_date = parse_date(f.get("birth_date"))
     if f.get("notes") is not None:
         st.notes = (f.get("notes") or "").strip()[:2000] or None
+    for field, n in (("job_title", 120), ("employee_no", 40)):
+        if f.get(field) is not None:
+            setattr(st, field, (f.get(field) or "").strip()[:n] or None)
+    if f.get("company_id") is not None:
+        cid = to_int(f.get("company_id"), 0, 10**9)
+        st.company_id = cid if cid and db.session.get(Company, cid) else None
+    name = (f.get("company_name") or "").strip()[:160]
+    if name:      # Excel import: "Entreprise" column, matched by name (created if new)
+        co = Company.query.filter(func.lower(Company.name) == name.lower()).first()
+        if not co:
+            co = Company(name=name, kind="company")
+            db.session.add(co)
+            db.session.flush()
+        st.company_id = co.id
 
 
 def ensure_schedule(enr, force=False):
@@ -1388,14 +1404,17 @@ def students_api():
 IMPORT_COLS = [("last_name", "Nom"), ("first_name", "Prénom"), ("phone", "Téléphone"), ("email", "Email"),
                ("birth_date", "Date de naissance"), ("birth_place", "Lieu de naissance"), ("level", "Niveau"),
                ("address", "Adresse"), ("parent_name", "Parent / tuteur"), ("parent_phone", "Tél. parent"),
-               ("parent_email", "Email parent")]
+               ("parent_email", "Email parent"), ("company_name", "Entreprise"), ("job_title", "Fonction"),
+               ("employee_no", "Matricule")]
 _ALIASES = {"nom": "last_name", "nom de famille": "last_name", "prenom": "first_name", "telephone": "phone",
             "tel": "phone", "mobile": "phone", "email": "email", "e-mail": "email", "mail": "email",
             "date de naissance": "birth_date", "naissance": "birth_date", "lieu de naissance": "birth_place",
             "niveau": "level", "niveau d'etudes": "level", "adresse": "address", "parent": "parent_name",
             "parent / tuteur": "parent_name", "tuteur": "parent_name", "nom du parent": "parent_name",
             "tel. parent": "parent_phone", "tel parent": "parent_phone", "telephone parent": "parent_phone",
-            "telephone du parent": "parent_phone", "email parent": "parent_email"}
+            "telephone du parent": "parent_phone", "email parent": "parent_email",
+            "entreprise": "company_name", "structure": "company_name", "societe": "company_name", "employeur": "company_name",
+            "poste": "job_title", "fonction": "job_title", "matricule": "employee_no", "n matricule": "employee_no"}
 
 
 def _norm_head(h):
@@ -2369,8 +2388,7 @@ def settings():
         db.session.commit()
         flash(_("Paramètres enregistrés."), "success")
         return redirect(url_for("settings"))
-    return render_template("settings.html", s=Setting.all(),
-                           email_ok=bool(os.environ.get("BREVO_API_KEY") or os.environ.get("SMTP_HOST")))
+    return render_template("settings.html", s=Setting.all(), email_ok=mail_status()[0], email_label=mail_status()[1])
 
 
 @app.route("/utilisateurs", methods=["GET", "POST"])
@@ -2395,7 +2413,7 @@ def users():
                 flash(_("Nom et email (unique) requis."), "error")
                 return redirect(url_for("users"))
             pw = f.get("password") or secrets.token_urlsafe(8)
-            u = User(name=f["name"].strip()[:120], email=email, role=f.get("role") if f.get("role") in ROLES else "secretaire")
+            u = User(name=f["name"].strip()[:120], email=email, role=f.get("role") if f.get("role") in ("admin", "secretaire", "formateur") else "secretaire")
             u.set_password(pw)
             db.session.add(u)
             flash(_("Compte créé. Mot de passe : {pw}", pw=pw), "success")
@@ -2763,8 +2781,13 @@ def start_scheduler():
     sch = BackgroundScheduler(daemon=True)
     sch.add_job(run_payment_reminders, "interval", minutes=60, id="pay", next_run_time=datetime.now() + timedelta(minutes=2))
     sch.add_job(run_seance_reminders, "interval", minutes=60, id="seance", next_run_time=datetime.now() + timedelta(minutes=3))
+    sch.add_job(globals()["run_company_reports"], "interval", minutes=60, id="rh", next_run_time=datetime.now() + timedelta(minutes=4))
     sch.start()
 
+
+import entreprise  # noqa: E402  (companies, RH portal, sender address)
+entreprise.register(app, globals())
+mail_status = globals()["mail_status"]
 
 if os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("ENABLE_SCHEDULER"):
     start_scheduler()

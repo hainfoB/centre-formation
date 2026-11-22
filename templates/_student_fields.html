@@ -10,5 +10,9 @@
 <div><label>{{ _("Parent / tuteur") }}</label><input name="parent_name" value="{{ st.parent_name or '' if st }}"></div>
 <div><label>{{ _("Tél. parent") }}</label><input name="parent_phone" value="{{ st.parent_phone or '' if st }}"></div>
 <div><label>{{ _("Email parent") }}</label><input type="email" name="parent_email" value="{{ st.parent_email or '' if st }}"></div>
+{% set _cos = company_options() %}{% if _cos %}
+<div><label>{{ _("Entreprise / structure") }}</label><select name="company_id"><option value="0">— {{ _("Particulier") }} —</option>{% for c in _cos %}<option value="{{ c.id }}" {{ 'selected' if st and st.company_id==c.id }}>{{ c.label() }}</option>{% endfor %}</select></div>
+<div><label>{{ _("Fonction / poste") }}</label><input name="job_title" value="{{ st.job_title or '' if st }}"></div>
+<div><label>{{ _("Matricule") }}</label><input name="employee_no" value="{{ st.employee_no or '' if st }}"></div>{% endif %}
 <div class="full"><label>{{ _("Notes internes") }}</label><textarea name="notes" rows="2">{{ st.notes or '' if st }}</textarea></div>
 </div>

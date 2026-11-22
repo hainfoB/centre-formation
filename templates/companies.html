@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% block title %}{{ _("Entreprises & groupes") }}{% endblock %}{% block content %}
+<div class="head"><div><h1>{{ _("Entreprises & groupes") }}</h1><div class="small muted">{{ _("Vos clients entreprises, regroupés par groupe industriel : salariés, émargement, accès RH et rapports par email.") }}</div></div>
+<button class="btn o" onclick="document.getElementById('newco').open=true;document.getElementById('newco').scrollIntoView({behavior:'smooth'})"><i class="bi bi-plus-lg"></i> {{ _("Nouvelle entreprise") }}</button></div>
+{% set orphans = allc|selectattr('kind','equalto','company')|selectattr('parent_id','none')|list %}
+{% macro corow(c, child=False) %}<tr data-row><td style="{{ 'padding-inline-start:30px' if child }}">{% if child %}<i class="bi bi-arrow-return-right muted"></i> {% endif %}<a href="{{ url_for('company_detail', cid=c.id) }}"><b>{{ c.name }}</b></a>{% if c.sector %}<div class="xs muted">{{ c.sector }}</div>{% endif %}</td>
+<td class="center">{{ counts.get(c.id, 0) }}</td><td class="small">{{ c.emails()|join(', ') or '—' }}</td><td class="center">{{ rh.get(c.id, 0) }}</td><td class="small">{{ L[c.report_freq or 'none'] }}</td></tr>{% endmacro %}
+<div class="card"><input data-filter="cot" placeholder="{{ _('Filtrer…') }}" style="max-width:280px;margin-bottom:10px">
+<div class="tw"><table id="cot"><thead><tr><th>{{ _("Nom") }}</th><th class="center">{{ _("Salariés") }}</th><th>{{ _("Emails RH") }}</th><th class="center">{{ _("Comptes RH") }}</th><th>{{ _("Rapport automatique") }}</th></tr></thead><tbody>
+{% for gr in groups %}<tr data-row style="background:#f6f8fb"><td><a href="{{ url_for('company_detail', cid=gr.id) }}"><i class="bi bi-diagram-3" style="color:var(--orange)"></i> <b>{{ gr.name }}</b></a> <span class="badge">{{ _("Groupe") }}</span></td>
+{% set ns = namespace(n=counts.get(gr.id, 0)) %}{% for c in gr.children() %}{% set ns.n = ns.n + counts.get(c.id, 0) %}{% endfor %}<td class="center">{{ ns.n }}</td><td class="small">{{ gr.emails()|join(', ') or '—' }}</td><td class="center">{{ rh.get(gr.id, 0) }}</td><td class="small">{{ L[gr.report_freq or 'none'] }}</td></tr>
+{% for c in gr.children() %}{{ corow(c, True) }}{% endfor %}{% endfor %}
+{% for c in orphans %}{{ corow(c) }}{% endfor %}
+{% if not allc %}<tr><td colspan="5" class="empty"><i class="bi bi-buildings"></i>{{ _("Aucune entreprise. Créez d'abord le groupe, puis ses structures.") }}</td></tr>{% endif %}
+</tbody></table></div></div>
+<details class="card" id="newco" {{ 'open' if not allc }}><summary><b>{{ _("Nouvelle entreprise ou nouveau groupe") }}</b></summary>
+<form method="post" style="margin-top:12px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="fields"><div><label>{{ _("Type") }}</label><select name="kind" onchange="document.getElementById('par').style.display=this.value=='group'?'none':''"><option value="company">{{ _("Entreprise / structure") }}</option><option value="group">{{ _("Groupe industriel") }}</option></select></div>
+<div id="par"><label>{{ _("Appartient au groupe") }}</label><select name="parent_id"><option value="">— {{ _("Aucun") }} —</option>{% for gr in groups %}<option value="{{ gr.id }}">{{ gr.name }}</option>{% endfor %}</select></div>
+<div><label>{{ _("Nom *") }}</label><input name="name" required></div><div><label>{{ _("Secteur d'activité") }}</label><input name="sector"></div>
+<div><label>{{ _("Interlocuteur") }}</label><input name="contact_name"></div><div><label>{{ _("Téléphone") }}</label><input name="contact_phone"></div>
+<div class="full"><label>{{ _("Emails des responsables RH (séparés par des virgules)") }}</label><input name="hr_emails" placeholder="rh@entreprise.dz, formation@entreprise.dz"></div>
+<div><label>{{ _("Rapport d'émargement par email") }}</label><select name="report_freq">{% for k in ('none','weekly','monthly','end') %}<option value="{{ k }}">{{ L[k] }}</option>{% endfor %}</select></div>
+<div><label>{{ _("Format des pièces jointes") }}</label><select name="report_format"><option value="both">PDF + Excel</option><option value="pdf">PDF</option><option value="xlsx">Excel</option></select></div></div>
+<button class="btn o" style="margin-top:12px">{{ _("Créer") }}</button></form></details>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block title %}{{ b.title }}{% endblock %}{% block content %}
+{% set ck = {'cid': root.id if preview else None} %}
+<div class="head"><div><div class="xs muted"><a href="{{ url_for('rh_home', **ck) }}">{{ root.name }}</a> › {{ _("Émargement détaillé") }}</div><h1>{{ b.title }}</h1><div class="small muted">{{ b.meta }}</div></div>
+<div class="row"><a class="btn sm" href="{{ url_for('rh_report', fmt='pdf', formation_id=b.formation.id, p=p, d1=d1, d2=d2, **ck) }}"><i class="bi bi-file-earmark-pdf"></i> PDF</a><a class="btn sm" href="{{ url_for('rh_report', fmt='xlsx', formation_id=b.formation.id, p=p, d1=d1, d2=d2, **ck) }}"><i class="bi bi-file-earmark-excel"></i> Excel</a></div></div>
+{% set fos = [] %}{% set fid = None %}{% with keep={'cid': ck.cid} %}{% include "_period.html" %}{% endwith %}
+<p class="small" style="margin:10px 0"><b>{{ period }}</b> · <span class="badge b-paid">P</span> {{ _("présent") }} <span class="badge b-due">R</span> {{ _("retard") }} <span class="badge b-overdue">A</span> {{ _("absent") }} <span class="badge">E</span> {{ _("excusé") }}</p>
+<div class="card"><div class="tw"><table><thead><tr><th style="position:sticky;left:0;background:#fff">{{ _("Salarié") }}</th>{% for s in b.seance_objs %}<th class="center xs" title="{{ s.topic or '' }}">{{ s.day.strftime('%d/%m') }}<div class="muted">{{ s.time_label or '' }}</div></th>{% endfor %}<th class="center">{{ _("Taux") }}</th><th class="center">{{ _("Heures") }}</th></tr></thead><tbody>
+{% for r in b.rows %}<tr><td style="position:sticky;left:0;background:#fff"><b>{{ r.name }}</b>{% if r.sub %}<div class="xs muted">{{ r.sub }}</div>{% endif %}</td>{% for m in r.marks %}<td class="center"><span class="badge {{ {'P':'b-paid','R':'b-due','A':'b-overdue'}.get(m,'') }}">{{ m }}</span></td>{% endfor %}
+<td class="center"><b style="color:{{ '#16a34a' if r.rate >= b.min else '#dc2626' }}">{{ r.rate }} %</b></td><td class="center">{{ r.hours }}</td></tr>{% endfor %}</tbody></table></div>
+{% if not b.seance_objs %}<p class="small muted">{{ _("Aucune séance sur la période choisie.") }}</p>{% endif %}</div>
+{% endblock %}

@@ -260,3 +260,87 @@ def cards_pdf(centre, cards):
         _draw_card(c, left + col * (W + gx), top - (row + 1) * H - row * gy, W, H, centre, logo, card)
     c.save()
     return buf.getvalue()
+
+
+# ── Company attendance report (émargement par entreprise / groupe) ────────────────────────────────
+def attendance_report_pdf(centre, title, subtitle, blocks, generated):
+    """blocks: [{"title", "meta", "seances": ["dd/mm"...], "rows": [{"name","sub","marks":[code...],"rate","hours"}]}]
+    Codes: P présent, R retard, A absent, E excusé, "" non pointé. Long sessions are split in chunks of columns."""
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import (KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table,
+                                    TableStyle)
+    buf = io.BytesIO()
+    W, H = landscape(A4)
+    logo = _logo_reader(centre)
+    font = "Taj" if _HAS_AR else "Helvetica"
+    fontb = "Taj-Bold" if _HAS_AR else "Helvetica-Bold"
+    sh = lambda t: _shape(t)[0]  # noqa: E731
+
+    def frame(c, doc):
+        c.saveState()
+        c.setFillColor(NAVY)
+        c.rect(0, H - 52, W, 52, fill=1, stroke=0)
+        c.setFillColor(ORANGE)
+        c.rect(0, H - 55, W, 3, fill=1, stroke=0)
+        x = 24
+        if logo:
+            c.drawImage(logo, 22, H - 46, 38, 38, preserveAspectRatio=True, mask="auto")
+            x = 70
+        c.setFillColor(white)
+        _fit(c, centre.get("centre_name", ""), x, H - 24, 380, 14, bold=True)
+        _fit(c, title, x, H - 41, 520, 10)
+        _fit(c, subtitle, W - 24, H - 24, 330, 10, align="right", bold=True)
+        c.setFillColor(GREY)
+        c.setFont(font, 7.5)
+        c.drawString(24, 16, sh(f"Document généré le {generated} · P = présent, R = retard, A = absent, E = excusé"))
+        c.drawRightString(W - 24, 16, f"{doc.page}")
+        c.restoreState()
+
+    doc = SimpleDocTemplate(buf, pagesize=(W, H), leftMargin=24, rightMargin=24, topMargin=72, bottomMargin=34,
+                            title=title)
+    st_h = ParagraphStyle("h", fontName=fontb, fontSize=12, textColor=NAVY, spaceAfter=2)
+    st_m = ParagraphStyle("m", fontName=font, fontSize=8.5, textColor=GREY, spaceAfter=6)
+    story = []
+    colors = {"P": HexColor("#dcfce7"), "R": HexColor("#fef3c7"), "A": HexColor("#fee2e2"), "E": HexColor("#e0e7ff")}
+    if not blocks:
+        story.append(Paragraph(sh("Aucune séance sur la période choisie."), st_h))
+    for bi, b in enumerate(blocks):
+        days = b["seances"]
+        chunk = 16
+        parts = [list(range(i, min(i + chunk, len(days)))) for i in range(0, max(len(days), 1), chunk)] or [[]]
+        for pi, idx in enumerate(parts):
+            head = [sh("Salarié"), sh("Fonction / structure")] + [days[i] for i in idx]
+            last = pi == len(parts) - 1
+            if last:
+                head += [sh("Taux"), sh("Heures")]
+            data = [head]
+            for r in b["rows"]:
+                line = [sh(r["name"]), sh(r.get("sub", ""))] + [r["marks"][i] for i in idx]
+                if last:
+                    line += [f'{r["rate"]} %', f'{r["hours"]}']
+                data.append(line)
+            namew, subw = 150, 130
+            rest = W - 48 - namew - subw - (90 if last else 0)
+            cw = [namew, subw] + [max(26, min(40, rest / max(len(idx), 1)))] * len(idx) + ([45, 45] if last else [])
+            t = Table(data, colWidths=cw, repeatRows=1)
+            style = [("FONT", (0, 0), (-1, -1), font, 8), ("FONT", (0, 0), (-1, 0), fontb, 8),
+                     ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), white),
+                     ("ALIGN", (2, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                     ("GRID", (0, 0), (-1, -1), .4, HexColor("#d6dce6")),
+                     ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, HexColor("#f6f8fb")])]
+            for ri, r in enumerate(b["rows"], 1):
+                for ci, i in enumerate(idx):
+                    code = r["marks"][i]
+                    if code in colors:
+                        style.append(("BACKGROUND", (2 + ci, ri), (2 + ci, ri), colors[code]))
+                if last and r["rate"] < b.get("min", 0):
+                    style.append(("TEXTCOLOR", (-2, ri), (-2, ri), HexColor("#dc2626")))
+            t.setStyle(TableStyle(style))
+            ttl = b["title"] + (f"  (suite {pi + 1}/{len(parts)})" if len(parts) > 1 else "")
+            story.append(KeepTogether([Paragraph(sh(ttl), st_h), Paragraph(sh(b.get("meta", "")), st_m)]))
+            story.append(t)
+            story.append(Spacer(1, 14))
+        if bi < len(blocks) - 1 and len(b["rows"]) > 18:
+            story.append(PageBreak())
+    doc.build(story, onFirstPage=frame, onLaterPages=frame)
+    return buf.getvalue()

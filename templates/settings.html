@@ -11,6 +11,8 @@
 <div class="full"><label>{{ _("Modalités de paiement par défaut") }}</label><textarea name="payment_info" rows="3">{{ s.payment_info }}</textarea></div></div>
 <div style="margin-top:12px"><button class="btn o">{{ _("Enregistrer") }}</button></div></form></div>
 <div class="card"><h2><i class="bi bi-cloud-download" style="color:var(--orange)"></i> {{ _("Sauvegarde") }}</h2><p class="small muted">{{ _("La base PostgreSQL est sauvegardée par Railway. Téléchargez aussi régulièrement une copie complète (Excel, une feuille par table) à conserver chez vous.") }}</p><a class="btn" href="{{ url_for('backup_xlsx') }}"><i class="bi bi-download"></i> {{ _("Télécharger la sauvegarde complète") }}</a></div>
-<div class="card"><h2>{{ _("Emails automatiques") }}</h2>{% if email_ok %}<p class="small" style="color:var(--ok)"><i class="bi bi-check-circle"></i> {{ _("Envoi d'emails configuré : confirmations, rappels J-1 et relances de paiement actifs.") }}</p>
-{% else %}<p class="small"><i class="bi bi-exclamation-triangle" style="color:var(--warn)"></i> {{ _("Mode WhatsApp : les emails sont désactivés (les relances et l'envoi des liens se font avec les boutons WhatsApp). Pour activer les emails plus tard, ajoutez sur Railway les variables") }} <code>{{ _("BREVO_API_KEY") }}</code> {{ _("et") }} <code>{{ _("EMAIL_FROM") }}</code> ({{ _("gratuit jusqu'à 300 emails/jour).") }}</p>{% endif %}</div>
+<div class="card"><div class="row" style="justify-content:space-between"><div><h2 style="margin:0"><i class="bi bi-envelope-at" style="color:var(--orange)"></i> {{ _("Adresse d'envoi des emails") }}</h2>
+<p class="small {{ '' if email_ok else 'muted' }}" style="margin:6px 0 0;{{ 'color:var(--ok)' if email_ok }}"><i class="bi {{ 'bi-check-circle' if email_ok else 'bi-exclamation-triangle' }}"></i> {{ email_label }}</p>
+<p class="xs muted" style="margin:4px 0 0">{{ _("Rapports RH, confirmations d'inscription, rappels et relances partent de cette adresse.") }}</p></div>
+<a class="btn" href="{{ url_for('mail_settings') }}"><i class="bi bi-sliders"></i> {{ _("Configurer et tester") }}</a></div></div>
 {% endblock %}

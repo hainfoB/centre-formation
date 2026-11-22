@@ -1,0 +1,8 @@
+{# period filter: needs p, d1, d2, fid, fos; extra hidden params in `keep` (dict) #}
+<form class="row toolbar" style="gap:8px;align-items:end;flex-wrap:wrap" method="get">
+{% for k, v in (keep or {}).items() %}{% if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}{% endfor %}
+<div><label class="xs">{{ _("Période") }}</label><select name="p" onchange="this.form.querySelector('.cust').style.display=this.value=='custom'?'flex':'none'">{% for k, n in (('week',_('Cette semaine')),('lastweek',_('Semaine dernière')),('month',_('Ce mois')),('lastmonth',_('Mois dernier')),('all',_('Depuis le début')),('custom',_('Dates au choix'))) %}<option value="{{ k }}" {{ 'selected' if p==k }}>{{ n }}</option>{% endfor %}</select></div>
+<div class="row cust" style="gap:8px;display:{{ 'flex' if p=='custom' else 'none' }}"><div><label class="xs">{{ _("Du") }}</label><input type="date" name="d1" value="{{ d1 or '' }}"></div><div><label class="xs">{{ _("Au") }}</label><input type="date" name="d2" value="{{ d2 or '' }}"></div></div>
+{% if fos %}<div><label class="xs">{{ _("Formation") }}</label><select name="formation_id"><option value="">{{ _("Toutes") }}</option>{% for f in fos %}<option value="{{ f.id }}" {{ 'selected' if fid==f.id }}>{{ f.title }}</option>{% endfor %}</select></div>{% endif %}
+{% if structures is defined and structures|length > 1 %}<div><label class="xs">{{ _("Structure") }}</label><select name="structure"><option value="">{{ _("Tout le groupe") }}</option>{% for s in structures %}<option value="{{ s.id }}" {{ 'selected' if sel==s.id }}>{{ s.name }}</option>{% endfor %}</select></div>{% endif %}
+<button class="btn sm"><i class="bi bi-funnel"></i> {{ _("Afficher") }}</button></form>

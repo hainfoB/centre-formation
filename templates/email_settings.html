@@ -1,0 +1,43 @@
+{% extends "base.html" %}{% block title %}{{ _("Adresse d'envoi") }}{% endblock %}{% block content %}
+<div class="head"><div><h1>{{ _("Adresse d'envoi des emails") }}</h1>
+<div class="small muted">{% if scope == 'platform' %}{{ _("Adresse par défaut de toutes les écoles : leurs emails partent d'ici, signés du nom de l'école, tant qu'elles n'ont pas configuré leur propre adresse.") }}{% else %}{{ _("Choisissez l'adresse professionnelle de l'école pour les rapports RH, confirmations, rappels et relances.") }}{% endif %}</div></div>
+{% if scope != 'platform' %}<a class="btn ghost sm" href="{{ url_for('settings') }}"><i class="bi bi-arrow-left"></i> {{ _("Paramètres") }}</a>{% endif %}</div>
+<div class="card" style="border-left:4px solid {{ 'var(--ok)' if status[0] else 'var(--warn)' }}"><b><i class="bi {{ 'bi-check-circle-fill' if status[0] else 'bi-exclamation-triangle-fill' }}"></i> {{ _("Adresse utilisée actuellement") }}</b><div class="small" style="margin-top:4px">{{ status[1] }}</div>
+{% if last_test %}<div class="xs muted" style="margin-top:4px">{{ _("Dernier test") }} : {{ last_test }}</div>{% endif %}</div>
+<div class="grid g2">
+<div class="card"><h2>{{ _("Coordonnées de l'adresse") }}</h2>
+<form method="post" autocomplete="off" id="mailf"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="save">
+<label>{{ _("Mode d'envoi") }}</label>
+<div class="row" style="margin-bottom:12px;gap:16px;flex-wrap:wrap">
+{% if scope != 'platform' %}<label class="check"><input type="radio" name="mode" value="platform" {{ 'checked' if raw.mode not in ('smtp','brevo') }}> {{ _("Adresse de la plateforme") }}{% if platform_from %} <span class="xs muted">({{ platform_from }})</span>{% endif %}</label>{% endif %}
+<label class="check"><input type="radio" name="mode" value="smtp" {{ 'checked' if raw.mode=='smtp' }}> {{ _("Boîte mail pro (SMTP)") }}</label>
+<label class="check"><input type="radio" name="mode" value="brevo" {{ 'checked' if raw.mode=='brevo' }}> {{ _("Service Brevo (API)") }}</label>
+{% if scope == 'platform' %}<label class="check"><input type="radio" name="mode" value="platform" {{ 'checked' if raw.mode not in ('smtp','brevo') }}> {{ _("Désactivé") }}</label>{% endif %}</div>
+<div class="fields">
+<div><label>{{ _("Adresse d'expédition *") }}</label><input type="email" name="from_email" value="{{ raw.from_email or '' }}" placeholder="contact@mon-ecole.dz"></div>
+<div><label>{{ _("Nom affiché") }}</label><input name="from_name" value="{{ raw.from_name or '' }}" placeholder="{{ centre.centre_name }}"></div>
+<div class="full"><label>{{ _("Adresse de réponse (facultatif)") }}</label><input type="email" name="reply_to" value="{{ raw.reply_to or '' }}" placeholder="secretariat@mon-ecole.dz"></div></div>
+<div data-mode="smtp" style="margin-top:12px">{% if on_railway %}<div class="tip" style="background:#fff3e8;border-left:3px solid var(--orange);padding:8px 10px;border-radius:6px;font-size:13px;margin-bottom:8px"><i class="bi bi-exclamation-triangle"></i> {{ _("L'hébergement actuel (Railway, offre Hobby) bloque l'envoi SMTP. Choisissez « Service Brevo (API) » avec la même adresse pro, ou passez à l'offre Pro de Railway.") }}</div>{% endif %}<h3 style="margin:0 0 6px;font-size:15px">{{ _("Serveur SMTP") }}</h3>
+<label>{{ _("Fournisseur (remplit le serveur)") }}</label><select id="preset"><option value="">{{ _("— Autre / personnalisé —") }}</option>{% for k, v in presets.items() %}<option value="{{ k }}" data-h="{{ v[0] }}" data-p="{{ v[1] }}" data-s="{{ v[2] }}">{{ {'gmail':'Gmail / Google Workspace','outlook':'Outlook.com / Hotmail','office365':'Microsoft 365','ovh':'OVH','hostinger':'Hostinger','zoho':'Zoho Mail','brevo_smtp':'Brevo (SMTP)','djaweb':'Djaweb (Algérie Télécom)'}[k] }}</option>{% endfor %}</select>
+<div class="fields" style="margin-top:8px">
+<div><label>{{ _("Serveur") }}</label><input name="host" id="h" value="{{ raw.host or '' }}" placeholder="mail.mon-ecole.dz"></div>
+<div class="row" style="gap:8px"><div style="flex:1"><label>{{ _("Port") }}</label><input name="port" id="pt" value="{{ raw.port or '587' }}"></div>
+<div style="flex:1"><label>{{ _("Sécurité") }}</label><select name="security" id="sec">{% for k, n in (('starttls','STARTTLS'),('ssl','SSL/TLS'),('none','Aucune')) %}<option value="{{ k }}" {{ 'selected' if (raw.security or 'starttls')==k }}>{{ n }}</option>{% endfor %}</select></div></div>
+<div><label>{{ _("Identifiant") }}</label><input name="user" value="{{ raw.user or '' }}" autocomplete="off" placeholder="contact@mon-ecole.dz"></div>
+<div><label>{{ _("Mot de passe") }}</label><input type="password" name="password" autocomplete="new-password" placeholder="{{ '•••••••• ' ~ _('(enregistré — laisser vide pour garder)') if has.password else '' }}"></div></div>
+<p class="xs muted">{{ _("Gmail et Outlook demandent un « mot de passe d'application » (compte avec validation en deux étapes), pas le mot de passe habituel.") }}</p></div>
+<div data-mode="brevo" style="margin-top:12px"><h3 style="margin:0 0 6px;font-size:15px">{{ _("Clé API Brevo") }}</h3>
+<input type="password" name="api_key" autocomplete="new-password" placeholder="{{ '•••••••• ' ~ _('(enregistrée — laisser vide pour garder)') if has.api_key else 'xkeysib-…' }}">
+<p class="xs muted">{{ _("Gratuit jusqu'à 300 emails/jour. L'adresse d'expédition doit être validée dans Brevo (Expéditeurs, domaines).") }}</p></div>
+<p class="xs muted"><i class="bi bi-shield-lock"></i> {{ _("Le mot de passe et la clé sont chiffrés dans la base et ne sont jamais réaffichés.") }}</p>
+<button class="btn o"><i class="bi bi-check2"></i> {{ _("Enregistrer") }}</button></form></div>
+<div><div class="card"><h2><i class="bi bi-send" style="color:var(--orange)"></i> {{ _("Envoyer un email de test") }}</h2>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="test">
+<label>{{ _("Envoyer à") }}</label><input type="email" name="test_to" required value="{{ current_user.email }}">
+<p class="xs muted">{{ _("Teste l'adresse enregistrée (enregistrez d'abord vos changements).") }}</p>
+<button class="btn"><i class="bi bi-envelope-check"></i> {{ _("Envoyer le test") }}</button></form></div>
+{% if logs %}<div class="card"><h2>{{ _("Derniers envois") }}</h2><div class="tw"><table>{% for l in logs %}<tr><td class="xs nowrap">{{ l.created_at.strftime('%d/%m %H:%M') }}</td><td class="xs">{{ l.subject }}<div class="muted">{{ l.to }}</div></td><td>{% if l.ok %}<span class="badge b-paid">{{ _("Envoyé") }}</span>{% else %}<span class="badge b-overdue" title="{{ l.error }}">{{ _("Échec") }}</span>{% endif %}</td></tr>{% endfor %}</table></div></div>{% endif %}</div></div>
+<script>(function(){var f=document.getElementById('mailf');function upd(){var m=(f.querySelector('input[name=mode]:checked')||{}).value;f.querySelectorAll('[data-mode]').forEach(function(d){d.style.display=d.dataset.mode===m?'':'none'})}
+f.querySelectorAll('input[name=mode]').forEach(function(r){r.onchange=upd});upd();
+document.getElementById('preset').onchange=function(){var o=this.selectedOptions[0];if(!o.dataset.h)return;document.getElementById('h').value=o.dataset.h;document.getElementById('pt').value=o.dataset.p;document.getElementById('sec').value=o.dataset.s}})();</script>
+{% endblock %}

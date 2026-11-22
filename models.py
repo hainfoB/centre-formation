@@ -11,7 +11,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
 
-ROLES = ("admin", "secretaire", "formateur")
+ROLES = ("admin", "secretaire", "formateur", "rh")
 FORMATION_STATUSES = ("draft", "open", "running", "done")
 ENROLL_STATUSES = ("pending", "confirmed", "waitlist", "cancelled")
 PAY_METHODS = ("cash", "ccp", "virement", "cheque", "autre")
@@ -121,6 +121,7 @@ class User(UserMixin, Tenant, db.Model):
     pay_rate = db.Column(db.Integer, nullable=True)         # DA per hour / per séance / per month
     lang = db.Column(db.String(2), nullable=True)
     is_super = db.Column(db.Boolean, nullable=True)         # platform owner (manages schools & licences)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=True)   # RH account: its company / group
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def set_password(self, pw):
@@ -138,6 +139,8 @@ class User(UserMixin, Tenant, db.Model):
             return True
         if self.role == "secretaire":
             return what != "admin"
+        if self.role == "rh":
+            return what == "rh"
         return what == "attendance"   # formateur
 
 
@@ -156,6 +159,9 @@ class Student(Tenant, db.Model):
     parent_phone = db.Column(db.String(30), nullable=True)
     parent_email = db.Column(db.String(150), nullable=True)
     parent_token = db.Column(db.String(40), unique=True, nullable=False, default=_tok)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=True, index=True)   # employer
+    job_title = db.Column(db.String(120), nullable=True)
+    employee_no = db.Column(db.String(40), nullable=True)
     notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     enrollments = db.relationship("Enrollment", backref="student", lazy="dynamic",
@@ -351,3 +357,75 @@ class AuditLog(Tenant, db.Model):
     action = db.Column(db.String(60), nullable=False)
     details = db.Column(db.String(300), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+REPORT_FREQS = ("none", "weekly", "monthly", "end")
+
+
+class Company(Tenant, db.Model):
+    """A client company (structure) of the school, optionally part of an industrial group.
+    kind = "group" for a holding / group, "company" for a structure (with parent_id = its group)."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(160), nullable=False)
+    kind = db.Column(db.String(8), default="company")
+    parent_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=True, index=True)
+    sector = db.Column(db.String(120), nullable=True)
+    address = db.Column(db.String(200), nullable=True)
+    nif = db.Column(db.String(40), nullable=True)
+    contact_name = db.Column(db.String(120), nullable=True)
+    contact_phone = db.Column(db.String(30), nullable=True)
+    hr_emails = db.Column(db.Text, nullable=True)              # comma / newline separated
+    report_freq = db.Column(db.String(8), default="none")
+    report_format = db.Column(db.String(5), default="both")    # pdf | xlsx | both
+    last_report_key = db.Column(db.String(40), nullable=True)
+    last_report_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def emails(self):
+        return [e.strip().lower() for e in re.split(r"[,;\s]+", self.hr_emails or "") if "@" in e]
+
+    def children(self):
+        return Company.query.filter_by(parent_id=self.id).order_by(Company.name).all() if self.kind == "group" else []
+
+    def scope_ids(self):
+        return [self.id] + [c.id for c in self.children()]
+
+    def parent(self):
+        return db.session.get(Company, self.parent_id) if self.parent_id else None
+
+    def label(self):
+        p = self.parent()
+        return f"{self.name} ({p.name})" if p else self.name
+
+
+class EmailLog(Tenant, db.Model):
+    """Every email the app tried to send (RH reports, tests…)."""
+    id = db.Column(db.Integer, primary_key=True)
+    to = db.Column(db.String(300), nullable=True)
+    subject = db.Column(db.String(200), nullable=True)
+    kind = db.Column(db.String(20), nullable=True)
+    company_id = db.Column(db.Integer, nullable=True, index=True)
+    ok = db.Column(db.Boolean, default=False)
+    error = db.Column(db.String(300), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PlatformSetting(db.Model):
+    """Platform-wide settings (no school): the default sender address of all schools."""
+    __tablename__ = "platform_setting"
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(50), unique=True, nullable=False)
+    value = db.Column(db.Text, nullable=True)
+
+    @classmethod
+    def get(cls, key, default=""):
+        row = cls.query.filter_by(key=key).first()
+        return row.value if row and row.value is not None else default
+
+    @classmethod
+    def set(cls, key, value):
+        row = cls.query.filter_by(key=key).first()
+        if not row:
+            row = cls(key=key)
+            db.session.add(row)
+        row.value = value

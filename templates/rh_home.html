@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block title %}{{ _("Espace RH") }}{% endblock %}{% block content %}
+{% if preview %}<div class="licbar"><i class="bi bi-eye"></i><span>{{ _("Aperçu de l'espace RH de « {c} », tel que le voit son responsable RH.", c=root.name) }}</span><a class="btn sm o" href="{{ url_for('company_detail', cid=root.id) }}">{{ _("Retour à la fiche") }}</a></div>{% endif %}
+<div class="head"><div><div class="xs muted">{{ _("Espace RH") }} · {{ centre.centre_name }}</div><h1>{{ root.name }}</h1>
+<div class="small muted">{{ _("Suivi de la formation de vos salariés : présences, assiduité et attestations.") }}</div></div></div>
+{% set ck = {'cid': root.id if preview else None} %}
+<div class="tabs">{% for k, n, i in (('suivi',_('Émargement & assiduité'),'clipboard-data'),('attestations',_('Attestations'),'award')) %}<a href="{{ url_for('rh_home', tab=k, **ck) }}" class="{{ 'on' if tab==k }}"><i class="bi bi-{{ i }}"></i> {{ n }}</a>{% endfor %}</div>
+{% if tab == 'suivi' %}
+{% with keep={'tab':'suivi','cid': ck.cid} %}{% include "_period.html" %}{% endwith %}
+<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><b class="small">{{ period }}</b><span class="grow"></span>
+{% set q = dict(p=p, d1=d1, d2=d2, formation_id=fid, structure=sel, **ck) %}
+<a class="btn sm" href="{{ url_for('rh_report', fmt='pdf', **q) }}"><i class="bi bi-file-earmark-pdf"></i> {{ _("Télécharger l'émargement (PDF)") }}</a>
+<a class="btn sm" href="{{ url_for('rh_report', fmt='xlsx', **q) }}"><i class="bi bi-file-earmark-excel"></i> {{ _("Excel") }}</a></div>
+{% set detail_tpl = url_for('rh_formation', fid=0, **ck) %}{% include "_att_blocks.html" %}
+{% else %}
+<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ _("Attestations de formation") }}</h2><input data-filter="cert" placeholder="{{ _('Filtrer…') }}" style="max-width:240px"></div>
+<div class="tw" style="margin-top:8px"><table id="cert"><thead><tr><th>{{ _("Salarié") }}</th><th>{{ _("Formation") }}</th><th>{{ _("État") }}</th><th></th></tr></thead><tbody>
+{% for c in certs %}<tr data-row><td><b>{{ c.name }}</b>{% if structures|length > 1 %}<div class="xs muted">{{ c.company }}</div>{% endif %}</td><td class="small">{{ c.formation.title }}</td>
+<td>{% if c.ok %}<span class="badge b-paid">{{ _("Disponible") }}</span>{% else %}<span class="badge b-due">{{ c.why }}</span>{% endif %}</td>
+<td>{% if c.ok %}<a class="btn sm" href="{{ url_for('rh_certificate', eid=c.enr.id, **ck) }}"><i class="bi bi-download"></i> PDF</a>{% endif %}</td></tr>
+{% else %}<tr><td colspan="4" class="empty"><i class="bi bi-award"></i>{{ _("Aucune formation suivie pour le moment.") }}</td></tr>{% endfor %}</tbody></table></div></div>
+{% endif %}
+{% endblock %}

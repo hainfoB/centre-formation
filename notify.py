@@ -1,62 +1,122 @@
 """Email sending (Brevo HTTPS API first — Railway blocks SMTP on small plans — then SMTP) and WhatsApp links."""
+import base64
 import json
 import os
 import smtplib
 import urllib.error
 import urllib.parse
 import urllib.request
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 
 
-def _brevo(to, subject, text, html, sender_name):
-    sender = os.environ.get("EMAIL_FROM") or os.environ.get("SMTP_USER")
-    payload = {"sender": {"email": sender, "name": sender_name}, "to": [{"email": to}],
-               "subject": subject, "textContent": text}
+LAST_ERROR = {"msg": ""}
+RESOLVER = None     # set by the app: () -> config dict of the current school (or platform)
+
+
+def _env_cfg():
+    if os.environ.get("BREVO_API_KEY"):
+        return {"mode": "brevo", "api_key": os.environ["BREVO_API_KEY"],
+                "from_email": os.environ.get("EMAIL_FROM") or os.environ.get("SMTP_USER") or ""}
+    if os.environ.get("SMTP_HOST"):
+        return {"mode": "smtp", "host": os.environ.get("SMTP_HOST"), "port": os.environ.get("SMTP_PORT") or "587",
+                "user": os.environ.get("SMTP_USER"), "password": os.environ.get("SMTP_PASSWORD"),
+                "from_email": os.environ.get("EMAIL_FROM") or os.environ.get("SMTP_USER") or ""}
+    return None
+
+
+def current_cfg():
+    cfg = None
+    if RESOLVER:
+        try:
+            cfg = RESOLVER()
+        except Exception as e:  # noqa: BLE001
+            print("mail cfg error", e)
+    return cfg or _env_cfg()
+
+
+def _brevo(cfg, to_list, subject, text, html, sender_name, attachments):
+    payload = {"sender": {"email": cfg.get("from_email"), "name": cfg.get("from_name") or sender_name},
+               "to": [{"email": t} for t in to_list], "subject": subject, "textContent": text or " "}
     if html:
         payload["htmlContent"] = html
+    if cfg.get("reply_to"):
+        payload["replyTo"] = {"email": cfg["reply_to"]}
+    if attachments:
+        payload["attachment"] = [{"name": n, "content": base64.b64encode(b).decode()} for n, b, _m in attachments]
     req = urllib.request.Request("https://api.brevo.com/v3/smtp/email", data=json.dumps(payload).encode(),
-                                 headers={"api-key": os.environ["BREVO_API_KEY"], "Content-Type": "application/json",
+                                 headers={"api-key": cfg.get("api_key") or "", "Content-Type": "application/json",
                                           "Accept": "application/json"}, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with urllib.request.urlopen(req, timeout=20) as r:
             return 200 <= r.status < 300
+    except urllib.error.HTTPError as e:
+        LAST_ERROR["msg"] = f"Brevo {e.code} : {e.read()[:200].decode(errors='ignore')}"
     except Exception as e:  # noqa: BLE001
-        print(f"Brevo error for {to}: {e}")
-        return False
+        LAST_ERROR["msg"] = f"Brevo : {e}"
+    return False
 
 
-def send_email(to, subject, text, html=None, sender_name="Centre de formation"):
-    """Returns True when sent. Never raises: without configuration it only logs."""
-    if not to:
-        return False
-    if os.environ.get("BREVO_API_KEY"):
-        return _brevo(to, subject, text, html, sender_name)
-    host, port = os.environ.get("SMTP_HOST"), os.environ.get("SMTP_PORT")
-    user, pw = os.environ.get("SMTP_USER"), os.environ.get("SMTP_PASSWORD")
-    if not all([host, port, user, pw]):
-        print(f"[email non configuré] {to} — {subject}")
-        return False
-    sender = os.environ.get("EMAIL_FROM", user)
-    msg = MIMEMultipart("alternative")
-    msg.attach(MIMEText(text, "plain", "utf-8"))
+def _smtp(cfg, to_list, subject, text, html, sender_name, attachments):
+    host, port = cfg.get("host"), int(cfg.get("port") or 587)
+    user, pw = cfg.get("user"), cfg.get("password")
+    sender = cfg.get("from_email") or user
+    msg = MIMEMultipart("mixed")
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(text or " ", "plain", "utf-8"))
     if html:
-        msg.attach(MIMEText(html, "html", "utf-8"))
-    msg["Subject"], msg["From"], msg["To"] = subject, f"{sender_name} <{sender}>", to
+        alt.attach(MIMEText(html, "html", "utf-8"))
+    msg.attach(alt)
+    for n, b, mime in attachments or []:
+        part = MIMEApplication(b, _subtype=(mime or "application/octet-stream").split("/")[-1])
+        part.add_header("Content-Disposition", "attachment", filename=n)
+        msg.attach(part)
+    msg["Subject"] = subject
+    msg["From"] = formataddr((cfg.get("from_name") or sender_name, sender))
+    msg["To"] = ", ".join(to_list)
+    if cfg.get("reply_to"):
+        msg["Reply-To"] = cfg["reply_to"]
     try:
-        if int(port) == 465:
-            with smtplib.SMTP_SSL(host, int(port), timeout=15) as s:
-                s.login(user, pw)
-                s.sendmail(sender, [to], msg.as_string())
+        if port == 465 or cfg.get("security") == "ssl":
+            with smtplib.SMTP_SSL(host, port, timeout=20) as s:
+                if user:
+                    s.login(user, pw)
+                s.sendmail(sender, to_list, msg.as_string())
         else:
-            with smtplib.SMTP(host, int(port), timeout=15) as s:
-                s.starttls()
-                s.login(user, pw)
-                s.sendmail(sender, [to], msg.as_string())
+            with smtplib.SMTP(host, port, timeout=20) as s:
+                s.ehlo()
+                if cfg.get("security") != "none":
+                    s.starttls()
+                    s.ehlo()
+                if user:
+                    s.login(user, pw)
+                s.sendmail(sender, to_list, msg.as_string())
         return True
     except Exception as e:  # noqa: BLE001
-        print(f"SMTP error for {to}: {e}")
+        LAST_ERROR["msg"] = f"SMTP : {e}"
         return False
+
+
+def send_email(to, subject, text, html=None, sender_name="Centre de formation", attachments=None, cfg=None):
+    """Returns True when sent. Never raises; the reason of a failure is in LAST_ERROR["msg"].
+    to: one address or a list. attachments: [(filename, bytes, mime)]."""
+    LAST_ERROR["msg"] = ""
+    to_list = [t for t in ([to] if isinstance(to, str) else (to or [])) if t]
+    if not to_list:
+        LAST_ERROR["msg"] = "Aucun destinataire"
+        return False
+    cfg = cfg or current_cfg()
+    if not cfg or not cfg.get("from_email"):
+        LAST_ERROR["msg"] = "Adresse d'envoi non configurée"
+        print(f"[email non configuré] {to_list} — {subject}")
+        return False
+    fn = _brevo if cfg.get("mode") == "brevo" else _smtp
+    ok = fn(cfg, to_list, subject, text, html, sender_name, attachments)
+    if not ok:
+        print(f"email error {to_list}: {LAST_ERROR['msg']}")
+    return ok
 
 
 def html_mail(centre, title, paragraphs, button=None):

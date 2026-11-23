@@ -7,6 +7,6 @@ pip install -q -r requirements-local.txt
 export SECRET_KEY=cle-locale-de-test
 unset DATABASE_URL
 export APP_MODE=local
-[ -f instance/centre.db ] || python seed_demo.py
-echo "Ouvrez http://localhost:5000 — compte : admin@demo.dz / demo1234"
+[ -f instance/centre.db ] || python seed_local.py
+echo "Ouvrez http://localhost:5000 — compte : direction@prolearning-demo.dz / demo1234"
 python app.py

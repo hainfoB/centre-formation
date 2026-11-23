@@ -15,10 +15,10 @@ set DATABASE_URL=
 set APP_MODE=local
 if not exist instance\centre.db (
   echo Creation de la base de demonstration...
-  python seed_demo.py
+  python seed_local.py
 )
 echo.
-echo Ouvrez http://localhost:5000  -  compte : admin@demo.dz / demo1234
+echo Ouvrez http://localhost:5000  -  compte : direction@prolearning-demo.dz / demo1234
 echo Fermez cette fenetre pour arreter l application.
 start "" http://localhost:5000
 python app.py

@@ -525,7 +525,10 @@ def register(app, A):  # noqa: C901
         expired = at.deadline and datetime.utcnow() > at.deadline + timedelta(seconds=30)
         if request.method == "POST" or expired:
             ans = {}
-            f = request.form
+            f = request.form if not expired else {}       # after the deadline (+30 s grace) answers are ignored
+            if expired:
+                from werkzeug.datastructures import MultiDict
+                f = MultiDict()
             for x in qs:
                 k = str(x.id)
                 if x.qtype == "multi":

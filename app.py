@@ -99,6 +99,11 @@ def security_headers(resp):
     resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     resp.headers.setdefault("Referrer-Policy", "same-origin")
     resp.headers.setdefault("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
+    resp.headers.setdefault("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                            "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; "
+                            "font-src 'self' data:; connect-src 'self'; frame-src 'self' https://www.youtube-nocookie.com "
+                            "https://player.vimeo.com https://drive.google.com; object-src 'none'; base-uri 'self'; "
+                            "form-action 'self' https:; frame-ancestors 'self'")
     if _PROD:
         resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
     if request.endpoint not in ("static",) and resp.mimetype == "text/html":

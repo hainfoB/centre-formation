@@ -18,6 +18,7 @@ from models import (ACTIVITY_KINDS, Activity, ActivityCompletion, Course, Course
                     StoredFile, db)
 
 MAX_FILE = 20 * 1024 * 1024
+SAFE_INLINE = ("application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "video/mp4", "video/webm", "video/ogg")   # never inline SVG / HTML (stored XSS)
 KIND_ICONS = {"page": "file-text", "file": "file-earmark-arrow-down", "video": "play-btn", "url": "link-45deg",
               "label": "tag", "quiz": "patch-question", "assign": "clipboard-check"}
 
@@ -341,7 +342,7 @@ def register(app, A):  # noqa: C901
     def el_file(fid):
         sf = StoredFile.query.get_or_404(fid)
         return send_file(io.BytesIO(sf.data), mimetype=sf.mime, download_name=sf.name,
-                         as_attachment=not (sf.mime or "").startswith(("application/pdf", "image/", "video/")))
+                         as_attachment=(sf.mime or "").split(";")[0].strip().lower() not in SAFE_INLINE)
 
     # ── Learner side (personal link, no account) ─────────────────────────────────────────────────
     def learner(token):
@@ -452,7 +453,7 @@ def register(app, A):  # noqa: C901
             abort(404)
         sf = a.file
         return send_file(io.BytesIO(sf.data), mimetype=sf.mime, download_name=sf.name,
-                         as_attachment=request.args.get("dl") == "1" or not (sf.mime or "").startswith(("application/pdf", "image/", "video/")))
+                         as_attachment=request.args.get("dl") == "1" or (sf.mime or "").split(";")[0].strip().lower() not in SAFE_INLINE)
 
     @app.context_processor
     def _el_ctx():

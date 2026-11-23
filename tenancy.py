@@ -187,17 +187,35 @@ def activate_key(school, code, today):
 
 
 # ── Transfert des données d'une école (local ⇄ en ligne) ────────────────────────────────────────
-_ORDER = [Student, Formation, Seance, Enrollment, Attendance, Payment, CashEntry]
-_FKS = {Formation: {"trainer_id": User}, Seance: {"formation_id": Formation, "teacher_id": User},
-        Enrollment: {"formation_id": Formation, "student_id": Student},
-        Attendance: {"seance_id": Seance, "enrollment_id": Enrollment}, Payment: {"enrollment_id": Enrollment},
-        CashEntry: {"teacher_id": User}}
-_UNIQUE = {Student: ["parent_token"], Formation: ["slug"], Seance: ["scan_token", "room_token"],
-           Enrollment: ["token"], Payment: ["receipt_no"]}
+def _models():
+    from models import (Activity, ActivityCompletion, Announcement, Company, Course, CourseAward, CourseSection, ForumPost,
+                        PollResponse, Question, QuizAttempt, StoredFile, Submission)
+    order = [Company, Student, Formation, Seance, Enrollment, Attendance, Payment, CashEntry, StoredFile, Course, CourseSection,
+             Activity, Question, QuizAttempt, Submission, ActivityCompletion, Announcement, ForumPost, PollResponse, CourseAward]
+    fks = {Company: {"parent_id": Company}, Student: {"company_id": Company},
+           Formation: {"trainer_id": User, "client_company_id": Company}, Seance: {"formation_id": Formation, "teacher_id": User},
+           Enrollment: {"formation_id": Formation, "student_id": Student},
+           Attendance: {"seance_id": Seance, "enrollment_id": Enrollment}, Payment: {"enrollment_id": Enrollment},
+           CashEntry: {"teacher_id": User}, Course: {"formation_id": Formation}, CourseSection: {"course_id": Course},
+           Activity: {"course_id": Course, "section_id": CourseSection, "file_id": StoredFile}, Question: {"course_id": Course},
+           QuizAttempt: {"activity_id": Activity, "enrollment_id": Enrollment},
+           Submission: {"activity_id": Activity, "enrollment_id": Enrollment, "file_id": StoredFile},
+           ActivityCompletion: {"activity_id": Activity, "enrollment_id": Enrollment}, Announcement: {"course_id": Course},
+           ForumPost: {"activity_id": Activity, "parent_id": ForumPost, "enrollment_id": Enrollment, "user_id": User},
+           PollResponse: {"activity_id": Activity, "enrollment_id": Enrollment},
+           CourseAward: {"course_id": Course, "enrollment_id": Enrollment}}
+    uniq = {Student: ["parent_token"], Formation: ["slug"], Seance: ["scan_token", "room_token"], Enrollment: ["token"],
+            Payment: ["receipt_no"], CourseAward: ["code"]}
+    return order, fks, uniq
+
+
 _USER_FIELDS = ["name", "email", "password_hash", "role", "active", "phone", "pay_mode", "pay_rate", "lang"]
 
 
 def _val(v):
+    if isinstance(v, (bytes, bytearray, memoryview)):
+        import base64
+        return {"$b": base64.b64encode(bytes(v)).decode()}
     if isinstance(v, datetime):
         return {"$dt": v.isoformat()}
     if isinstance(v, date):
@@ -206,6 +224,9 @@ def _val(v):
 
 
 def _unval(v):
+    if isinstance(v, dict) and "$b" in v:
+        import base64
+        return base64.b64decode(v["$b"])
     if isinstance(v, dict) and "$dt" in v:
         return datetime.fromisoformat(v["$dt"])
     if isinstance(v, dict) and "$d" in v:
@@ -219,9 +240,10 @@ def _cols(model):
 
 def export_school():
     """Whole data of the current school as compressed JSON bytes."""
-    out = {"format": "haithemeduai-ecole", "version": 1, "exported_at": datetime.utcnow().isoformat(),
+    _ORDER = _models()[0]
+    out = {"format": "haithemeduai-ecole", "version": 2, "exported_at": datetime.utcnow().isoformat(),
            "settings": {r.key: r.value for r in Setting.query.all()},
-           "users": [{c: _val(getattr(u, c)) for c in ["id"] + _USER_FIELDS} for u in User.query.all()]}
+           "users": [{c: _val(getattr(u, c)) for c in ["id", "company_id"] + _USER_FIELDS} for u in User.query.all()]}
     for m in _ORDER:
         out[m.__tablename__] = [{c: _val(getattr(r, c)) for c in _cols(m)} for r in m.query.order_by(m.id).all()]
     return zlib.compress(json.dumps(out, ensure_ascii=False).encode(), 9)
@@ -235,6 +257,8 @@ def import_school(blob, school):
         data = json.loads(blob.decode())
     if data.get("format") != "haithemeduai-ecole":
         raise ValueError("format")
+    _ORDER, _FKS, _UNIQUE = _models()
+    User.query.filter(User.company_id.isnot(None)).update({"company_id": None}, synchronize_session=False)
     for m in reversed(_ORDER):                       # wipe (scoped to this school)
         m.query.delete(synchronize_session=False)
     db.session.flush()
@@ -270,11 +294,35 @@ def import_school(blob, school):
             db.session.add(obj)
             db.session.flush()
             idmap[m][old_id] = obj.id
+    _remap_json(data, idmap)
     for k, v in (data.get("settings") or {}).items():
         Setting.set(k, v)
     db.session.add(AuditLog(school_id=school.id, user="import", action="import_donnees",
                             details=json.dumps(counts)[:300]))
     return counts
+
+
+def _remap_json(data, idmap):
+    """Ids stored inside JSON columns (quiz question lists, live session, attempts) and RH users' company."""
+    from models import Activity, Company, Question, QuizAttempt, Seance
+    for a in Activity.query.all():
+        o = a.opts()
+        if o.get("ids"):
+            o["ids"] = [idmap[Question].get(i) for i in o["ids"] if idmap[Question].get(i)]
+        if o.get("seance_id"):
+            o["seance_id"] = idmap[Seance].get(o["seance_id"])
+        a.set_opts(o)
+    for at in QuizAttempt.query.all():
+        lay, ans = json.loads(at.layout or "{}"), json.loads(at.answers or "{}")
+        qm = idmap[Question]
+        lay = {"q": [qm.get(i, i) for i in lay.get("q", [])], "o": {str(qm.get(int(k), k)): v for k, v in lay.get("o", {}).items()}}
+        at.layout = json.dumps(lay)
+        at.answers = json.dumps({str(qm.get(int(k), k)): v for k, v in ans.items()}, ensure_ascii=False)
+    for u in data.get("users", []):
+        new = idmap[User].get(u["id"])
+        if new and u.get("company_id"):
+            nu = db.session.get(User, new)
+            nu.company_id = idmap[Company].get(u["company_id"])
 
 
 # ── Mise en place / migration de l'ancienne base mono-école ────────────────────────────────────

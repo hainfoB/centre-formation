@@ -6,5 +6,5 @@ set DATABASE_URL=
 set APP_MODE=local
 echo Cette operation efface la base locale et recree les donnees de demonstration.
 pause
-python seed_demo.py
+python seed_local.py
 pause

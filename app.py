@@ -18,7 +18,8 @@ from flask_wtf.csrf import CSRFProtect
 from sqlalchemy import func, or_
 
 from flask import g
-from models import (CASH_IN, CASH_OUT, FORMATION_STATUSES, PAY_METHODS, PLANS, ROLES, Attendance, AuditLog, CashEntry,
+from models import (ADDON_PLANS, MODULE_NEEDS, MODULES, PLAN_MODULES, SALE_PLANS,
+                    CASH_IN, CASH_OUT, FORMATION_STATUSES, PAY_METHODS, PLANS, ROLES, Attendance, AuditLog, CashEntry,
                     Enrollment, Formation, LicenseKey, Payment, School, Seance, Setting, Student, User, Company, db)
 import tenancy
 from tenancy import as_school, unscoped
@@ -264,7 +265,8 @@ def inject():
             "nav": nav, "L": LABELS, "centre": centre_settings(), "today": today(), "fmt_da": fmt_da, "wa": wa_link,
             "email_on": (globals().get("mail_status") or (lambda: (False, "")))()[0],
             "roles": ROLES, "pay_methods": PAY_METHODS, "statuses": FORMATION_STATUSES,
-            "school": g.get("school"), "lic": licence_info(g.get("school")), "LOCAL": LOCAL}
+            "school": g.get("school"), "lic": licence_info(g.get("school")), "LOCAL": LOCAL,
+            "has_mod": lambda m: (g.get("school") is None) or g.school.has(m), "MODULES": MODULES}
 
 
 def centre_settings():
@@ -378,6 +380,45 @@ def tenant_context():
 
 app.before_request_funcs.setdefault(None, []).insert(0, tenant_context)
 
+# Pages of each optional module (rule patterns, most specific first)
+_MODULE_RULES = [
+    ("ai", re.compile(r"^/elearning/<int:cid>/questions/generer")),
+    ("eval", re.compile(r"^/elearning/<int:cid>/(questions|quiz|devoir|notes)|^/t/<token>/(eval|tentative|notes)/")),
+    ("interact", re.compile(r"^/elearning/<int:cid>/(forum|sondage|badge)|^/t/<token>/(forum|sondage|live|badge)/")),
+    ("elearning", re.compile(r"^/elearning|^/calendrier|^/t/<token>/(cours|a/|fichier/|calendrier)")),
+    ("rh", re.compile(r"^/entreprises|^/rh(/|\.|$)|/attestations-par-entreprise")),
+]
+_KIND_MODULE = {"quiz": "eval", "assign": "eval", "forum": "interact", "poll": "interact", "live": "interact"}
+
+
+def has_kind(kind):
+    sc = g.get("school")
+    return not sc or not _KIND_MODULE.get(kind) or sc.has(_KIND_MODULE[kind])
+
+
+def rule_module(rule):
+    for mod, rx in _MODULE_RULES:
+        if rx.search(rule or ""):
+            return mod
+    return None
+
+
+@app.before_request
+def module_gate():
+    """A page of a module the school has not bought: hidden (404) for the public, licence page for the staff."""
+    sc = g.get("school")
+    if not sc or request.url_rule is None:
+        return None
+    mod = rule_module(request.url_rule.rule)
+    if request.endpoint == "el_activity" and _KIND_MODULE.get(request.args.get("kind")):
+        mod = _KIND_MODULE[request.args["kind"]]
+    if mod and not sc.has(mod):
+        if current_user.is_authenticated and current_user.role != "rh":
+            flash(_("Le module « {m} » n'est pas inclus dans votre licence.", m=_(MODULES[mod])), "error")
+            return redirect(url_for("licence") if current_user.can("manage") else url_for("dashboard"))
+        abort(404)
+    return None
+
 
 @app.before_request
 def first_run():
@@ -480,6 +521,8 @@ def login():
                 return render_template("login.html")
             _LOGIN_FAILS.pop(ip, None)
             login_user(u, remember=bool(request.form.get("remember")))
+            if u.is_super and request.form.get("password", "") == (os.environ.get("SUPERADMIN_PASSWORD") or "\0"):
+                flash(_("Sécurité : vous utilisez encore le mot de passe initial de la plateforme. Changez-le dans « Mon compte »."), "error")
             nxt = request.args.get("next") or ""
             return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("dashboard"))
         n, t0 = _LOGIN_FAILS.get(ip, (0, datetime.utcnow().timestamp()))
@@ -1393,6 +1436,10 @@ def student_detail(sid):
             return redirect(url_for("students"))
         if request.form.get("action") == "new_parent_link":
             st.parent_token = secrets.token_urlsafe(24)
+        elif request.form.get("action") == "new_learner_link":
+            enr = st.enrollments.filter_by(id=request.form.get("eid", type=int)).first_or_404()
+            enr.token = secrets.token_urlsafe(16)
+            log("learner_link_reset", f"{st.full_name} — {enr.formation.title}")
         else:
             apply_student_form(st, request.form)
         db.session.commit()
@@ -2467,7 +2514,10 @@ def account():
 
 
 # ── Licence, transfer of data, platform (super-admin) ─────────────────────────────────────────────
-PLAN_NAMES = {"trial": "Essai gratuit", "pass": "Pass+ (1 an)", "ultimate": "Ultimate (2 ans)", "lifetime": "À vie"}
+PLAN_NAMES = {"trial": "Essai gratuit", "centre": "Pack Centre", "entreprise": "Pack Entreprise", "elearning": "Pack E-learning",
+              "complete": "Pack Académie complète", "m_rh": "Module Entreprises & RH", "m_elearn": "Module E-learning",
+              "m_eval": "Module Évaluation", "m_interact": "Module Interaction & certification", "m_ai": "Module Assistant IA",
+              "pass": "Pass+ (1 an)", "ultimate": "Ultimate (2 ans)", "lifetime": "À vie (ancienne offre)"}
 KEY_MSG = {"empty": "Saisissez une clé.", "invalid": "Clé invalide. Vérifiez-la ou contactez-nous.",
            "used": "Cette clé a déjà été utilisée par une autre école.", "already": "Cette clé est déjà activée sur votre école.",
            "other_school": "Cette clé a été émise pour un autre établissement (nom différent)."}
@@ -2487,7 +2537,10 @@ def licence():
             db.session.rollback()
             flash(_(KEY_MSG[res]), "error")
         return redirect(url_for("licence"))
-    return render_template("licence.html", sc=sc, plans=PLANS, names=PLAN_NAMES,
+    from models import Backup
+    backups = Backup.query.with_entities(Backup.id, Backup.created_at, Backup.size).order_by(Backup.created_at.desc()).limit(30).all()
+    return render_template("licence.html", sc=sc, plans=PLANS, names=PLAN_NAMES, sale_plans=SALE_PLANS, backups=backups,
+                           addon_plans=ADDON_PLANS, plan_modules=PLAN_MODULES,
                            sales_wa=lambda plan: wa_link(SALES_PHONE, _(
                                "Bonjour, je souhaite l'offre {plan} de AcadémieProLearning pour « {name} ».",
                                plan=_(PLAN_NAMES[plan]), name=sc.name)))
@@ -2583,7 +2636,7 @@ def platform():
             sales[mk] += PLANS[k.plan][1]
     by_plan = {p: sum(1 for sc in schools if sc.plan == p and not sc.expired(t)) for p in PLANS}
     g_ = {"schools": len(schools), "active": sum(1 for sc in schools if sc.active and not sc.expired(t)),
-          "trial": by_plan["trial"], "paid": sum(by_plan[p] for p in ("pass", "ultimate", "lifetime")),
+          "trial": by_plan["trial"], "paid": sum(by_plan[p] for p in PLANS if p != "trial"),
           "expired": sum(1 for sc in schools if sc.expired(t)), "suspended": sum(1 for sc in schools if not sc.active),
           "students": Student.query.count(), "users": User.query.filter(User.school_id.isnot(None)).count(),
           "formations": Formation.query.count(), "enrollments": Enrollment.query.filter_by(status="confirmed").count(),
@@ -2653,6 +2706,9 @@ def platform_school(sid):
             if f["plan"] != "trial":
                 record_sale(sc, f["plan"], f.get("note") or "appliqué par la plateforme")
             flash(_("{plan} appliqué.", plan=_(PLAN_NAMES[f["plan"]])), "success")
+        elif act == "modules":
+            sc.set_modules(f.getlist("mod"))
+            flash(_("Modules enregistrés."), "success")
         elif act == "expiry":
             sc.expires_on = parse_date(f.get("expires_on"))
             flash(_("Date d'expiration modifiée.") if sc.expires_on else _("Licence rendue définitive."), "success")
@@ -2671,10 +2727,8 @@ def platform_school(sid):
             if f.get("confirm", "").strip() != sc.name:
                 flash(_("Tapez le nom exact de l'école pour confirmer la suppression."), "error")
                 return redirect(url_for("platform_school", sid=sc.id))
-            for m in (Attendance, Payment, CashEntry, Enrollment, Seance, Formation, Student, Setting, AuditLog, User):
-                m.query.filter_by(school_id=sc.id).delete(synchronize_session=False)
             name = sc.name
-            db.session.delete(sc)
+            tenancy.wipe_school(sc.id)
             db.session.commit()
             flash(_("École « {name} » et toutes ses données supprimées.", name=name), "success")
             return redirect(url_for("platform_schools"))
@@ -2800,6 +2854,37 @@ def not_found(_e):
 
 
 # ── Background jobs (one gunicorn worker, see Procfile) ───────────────────────────────────────────
+def _run_daily_backup():
+    """One automatic copy per school and per day; the last 30 are kept."""
+    from models import Backup
+    last = Backup.query.order_by(Backup.created_at.desc()).first()
+    if last and datetime.utcnow() - last.created_at < timedelta(hours=20):
+        return 0
+    blob = tenancy.export_school()
+    db.session.add(Backup(school_id=g_school_id(), size=len(blob), data=blob))
+    db.session.flush()
+    for old in Backup.query.order_by(Backup.created_at.desc()).offset(30).all():
+        db.session.delete(old)
+    db.session.commit()
+    return 1
+
+
+def g_school_id():
+    return tenancy.current_school_id()
+
+
+run_daily_backup = _each_school(_run_daily_backup)
+
+
+@app.route("/abonnement/sauvegarde/<int:bid>")
+@role_required("admin")
+def backup_download(bid):
+    from models import Backup
+    b = Backup.query.get_or_404(bid)
+    return send_file(io.BytesIO(b.data), mimetype="application/octet-stream", as_attachment=True,
+                     download_name=f"{g.school.slug}_{b.created_at:%Y%m%d}_auto.hedu")
+
+
 def start_scheduler():
     if os.environ.get("DISABLE_SCHEDULER"):
         return
@@ -2809,6 +2894,7 @@ def start_scheduler():
     sch.add_job(run_seance_reminders, "interval", minutes=60, id="seance", next_run_time=datetime.now() + timedelta(minutes=3))
     sch.add_job(globals()["run_company_reports"], "interval", minutes=60, id="rh", next_run_time=datetime.now() + timedelta(minutes=4))
     sch.add_job(globals()["run_due_reminders"], "interval", minutes=60, id="due", next_run_time=datetime.now() + timedelta(minutes=5))
+    sch.add_job(run_daily_backup, "interval", minutes=60, id="backup", next_run_time=datetime.now() + timedelta(minutes=6))
     sch.start()
 
 

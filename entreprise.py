@@ -9,6 +9,7 @@ import re
 from datetime import date, datetime, timedelta
 from functools import wraps
 
+from markupsafe import escape
 from flask import abort, flash, g, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
@@ -350,11 +351,11 @@ def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with t
         blocks, tot = company_report(co.scope_ids(), d1, d2, formation_id)
         c = A["centre_settings"]()
         paras = [_("Bonjour,"),
-                 _("Veuillez trouver ci-joint l'état d'émargement des salariés de <b>{c}</b> — {p}.", c=co.name, p=period_text(d1, d2).lower())]
+                 _("Veuillez trouver ci-joint l'état d'émargement des salariés de <b>{c}</b> — {p}.", c=escape(co.name), p=period_text(d1, d2).lower())]
         if reason:
             paras.append(reason)
         table = "".join(
-            f'<tr><td style="padding:6px 8px;border-bottom:1px solid #e5e9f0">{b["title"]}</td>'
+            f'<tr><td style="padding:6px 8px;border-bottom:1px solid #e5e9f0">{escape(b["title"])}</td>'
             f'<td style="padding:6px 8px;border-bottom:1px solid #e5e9f0;text-align:center">{len(b["rows"])}</td>'
             f'<td style="padding:6px 8px;border-bottom:1px solid #e5e9f0;text-align:center">{len(b["seances"])}</td>'
             f'<td style="padding:6px 8px;border-bottom:1px solid #e5e9f0;text-align:center;font-weight:bold;color:{"#dc2626" if b["avg"] < b["min"] else "#16a34a"}">{b["avg"]} %</td></tr>'
@@ -366,7 +367,7 @@ def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with t
         low = [(r["name"], b["title"], r["rate"]) for b in blocks for r in b["rows"] if b["seances"] and r["rate"] < b["min"]]
         if low:
             paras.append(_("<b>Assiduité insuffisante</b> (sous le seuil de l'attestation) : ") +
-                         ", ".join(f"{n} ({r} %, {t})" for n, t, r in low[:15]) + ("…" if len(low) > 15 else ""))
+                         ", ".join(f"{escape(n)} ({r} %, {escape(t)})" for n, t, r in low[:15]) + ("…" if len(low) > 15 else ""))
         paras.append(_("Présences : {p} · retards : {r} · absences : {a} · heures de formation suivies : {h} h.",
                        p=tot["present"], r=tot["late"], a=tot["absent"], h=tot["hours"]))
         html = notify.html_mail(c["centre_name"], _("Rapport d'émargement"), paras,
@@ -387,6 +388,8 @@ def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with t
         if now.hour < 7:
             return 0
         d, sent = now.date(), 0
+        if not (notify.current_cfg() or {}).get("from_email"):  # no sender address yet: do not fill the history with failures
+            return 0
         for co in Company.query.filter(Company.report_freq.in_(("weekly", "monthly", "end"))).all():
             if not co.emails():
                 continue
@@ -401,15 +404,24 @@ def register(app, A):   # noqa: C901  (A = app.py globals: helpers shared with t
                 d1, key = d2.replace(day=1), f"M{d2:%Y%m}"
                 reason = _("Rapport mensuel automatique.")
             elif co.report_freq == "end":
+                # formations ended during the last 7 days (catches up if the server was down that day)
                 ended = (Formation.query.join(Enrollment).join(Student)
-                         .filter(Student.company_id.in_(co.scope_ids()), Formation.ends_on == d - timedelta(days=1)).first())
+                         .filter(Student.company_id.in_(co.scope_ids()), Formation.ends_on < d,
+                                 Formation.ends_on >= d - timedelta(days=7))
+                         .order_by(Formation.ends_on).all())
+                done = set((co.last_report_key or "").split(","))
+                ended = next((f for f in ended if f"E{f.id}" not in done), None)
                 if ended:
-                    fid, d1, d2, key = ended.id, None, ended.ends_on, f"E{d:%Y%m%d}{ended.id}"
+                    fid, d1, d2, key = ended.id, None, ended.ends_on, f"E{ended.id}"
                     reason = _("La formation « {t} » s'est terminée : voici l'état complet des présences.", t=ended.title)
-            if key and co.last_report_key != key:
+            if key and key not in (co.last_report_key or "").split(","):
                 ok, _err = send_company_report(co, d1, d2, fid, reason)
                 if ok:
-                    co.last_report_key = key
+                    if key.startswith("E"):  # keep the last end-of-formation keys, so each one is sent once
+                        prev = [k for k in (co.last_report_key or "").split(",") if k.startswith("E")][-4:]
+                        co.last_report_key = ",".join(prev + [key])[-40:].lstrip(",")
+                    else:
+                        co.last_report_key = key
                     sent += 1
                 db.session.commit()
         return sent

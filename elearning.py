@@ -263,7 +263,7 @@ def register(app, A):  # noqa: C901
         enrs = c.formation.enrollments.filter_by(status="confirmed").all()
         sample = enrs[0] if enrs else None
         return render_template("el_course.html", c=c, sections=c.sections.all(), learners=len(enrs), sample=sample,
-                               kinds=ACTIVITY_KINDS)
+                               kinds=[k for k in ACTIVITY_KINDS if A["has_kind"](k)])
 
     @app.route("/elearning/<int:cid>/activite", methods=["GET", "POST"])
     @app.route("/elearning/<int:cid>/activite/<int:aid>", methods=["GET", "POST"])

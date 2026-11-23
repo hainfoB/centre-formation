@@ -21,14 +21,14 @@
   <a href="{{ url_for('dashboard') }}" class="{{ 'on' if ep=='dashboard' }}"><i class="bi bi-speedometer2"></i> {{ _("Tableau de bord") }}{% if nav.pending %}<span class="pill">{{ nav.pending }}</span>{% endif %}</a>
   <a href="{{ url_for('formations') }}" class="{{ 'on' if ep in ('formations','formation_detail','payments_view') }}"><i class="bi bi-journal-bookmark"></i> {{ _("Formations") }}</a>
   <a href="{{ url_for('students') }}" class="{{ 'on' if ep in ('students','student_detail') }}"><i class="bi bi-people"></i> {{ _("Stagiaires") }}</a>
-  <a href="{{ url_for('el_courses') }}" class="{{ 'on' if ep and ep.startswith('el_') and ep != 'el_calendar' }}"><i class="bi bi-laptop"></i> {{ _("E-learning") }}</a>
-  <a href="{{ url_for('el_calendar') }}" class="{{ 'on' if ep == 'el_calendar' }}"><i class="bi bi-calendar3"></i> {{ _("Calendrier") }}</a>
-  <a href="{{ url_for('companies') }}" class="{{ 'on' if ep in ('companies','company_detail') }}"><i class="bi bi-buildings"></i> {{ _("Entreprises & groupes") }}</a>
+  {% if has_mod('elearning') %}<a href="{{ url_for('el_courses') }}" class="{{ 'on' if ep and ep.startswith('el_') and ep != 'el_calendar' }}"><i class="bi bi-laptop"></i> {{ _("E-learning") }}</a>
+  <a href="{{ url_for('el_calendar') }}" class="{{ 'on' if ep == 'el_calendar' }}"><i class="bi bi-calendar3"></i> {{ _("Calendrier") }}</a>{% endif %}
+  {% if has_mod('rh') %}<a href="{{ url_for('companies') }}" class="{{ 'on' if ep in ('companies','company_detail') }}"><i class="bi bi-buildings"></i> {{ _("Entreprises & groupes") }}</a>{% endif %}
   {% endif %}
   {% if current_user.role == 'rh' %}<a href="{{ url_for('rh_home') }}" class="{{ 'on' if ep in ('rh_home','rh_formation') }}"><i class="bi bi-clipboard-data"></i> {{ _("Suivi des salariés") }}</a>
   <a href="{{ url_for('rh_home', tab='attestations') }}"><i class="bi bi-award"></i> {{ _("Attestations") }}</a>{% endif %}
   {% if school and current_user.role != 'rh' %}<a href="{{ url_for('identify_page') }}" class="{{ 'on' if ep=='identify_page' }}"><i class="bi bi-upc-scan"></i> {{ _("Pointage rapide") }}</a>{% endif %}
-  {% if school and current_user.role == 'formateur' %}<a href="{{ url_for('el_courses') }}" class="{{ 'on' if ep and ep.startswith('el_') }}"><i class="bi bi-laptop"></i> {{ _("Mes cours en ligne") }}</a><a href="{{ url_for('el_calendar') }}" class="{{ 'on' if ep == 'el_calendar' }}"><i class="bi bi-calendar3"></i> {{ _("Calendrier") }}</a>{% endif %}
+  {% if school and current_user.role == 'formateur' and has_mod('elearning') %}<a href="{{ url_for('el_courses') }}" class="{{ 'on' if ep and ep.startswith('el_') }}"><i class="bi bi-laptop"></i> {{ _("Mes cours en ligne") }}</a><a href="{{ url_for('el_calendar') }}" class="{{ 'on' if ep == 'el_calendar' }}"><i class="bi bi-calendar3"></i> {{ _("Calendrier") }}</a>{% endif %}
   {% if school and current_user.role != 'rh' %}<a href="{{ url_for('my_seances') }}" class="{{ 'on' if ep in ('my_seances','seance_view') }}"><i class="bi bi-calendar-check"></i> {{ _("Séances & présences") }}</a>{% endif %}
   {% if current_user.can('manage') and school %}
   <div class="navsec">{{ _("Finances") }}</div>

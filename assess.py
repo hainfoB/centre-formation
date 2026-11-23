@@ -512,7 +512,7 @@ def register(app, A):  # noqa: C901
     def learn_attempt(token, atid):
         enr = Enrollment.query.filter_by(token=token).first_or_404()
         at = QuizAttempt.query.get_or_404(atid)
-        if at.enrollment_id != enr.id:
+        if at.enrollment_id != enr.id or enr.status != "confirmed":
             abort(404)
         a = db.session.get(Activity, at.activity_id)
         c = db.session.get(Course, a.course_id)
@@ -557,7 +557,7 @@ def register(app, A):  # noqa: C901
     def learn_grades(token, cid):
         enr = Enrollment.query.filter_by(token=token).first_or_404()
         c = Course.query.get_or_404(cid)
-        if c.formation_id != enr.formation_id or c.status != "published":
+        if enr.status != "confirmed" or c.formation_id != enr.formation_id or c.status != "published":
             abort(404)
         items = [x for x in c.activities(True) if x.kind in ("quiz", "assign")]
         vals = [(x, item_pct(x, enr.id)) for x in items]

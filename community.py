@@ -381,6 +381,8 @@ def register(app, A):  # noqa: C901
 
     # ── Notifications : deadline reminder (hourly job, 24 h before) and graded assignment ──────────
     def _run_due_reminders():
+        if not (notify.current_cfg() or {}).get("from_email"):  # keep the reminder for when emails work
+            return 0
         now = A["local_now"]().replace(tzinfo=None)
         sent = 0
         for a in Activity.query.filter_by(kind="assign", visible=True).all():

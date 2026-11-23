@@ -28,9 +28,25 @@ class Tenant:
         return db.Column(db.Integer, db.ForeignKey("school.id"), nullable=True, index=True)
 
 
-PLANS = {   # code: (days, price DA)
-    "trial": (30, 0), "pass": (365, 8000), "ultimate": (730, 14000), "lifetime": (0, 60000),
+PLANS = {   # code: (days, price DA) — days 0 = definitive licence
+    "trial": (30, 0),
+    # definitive packs (AcadémieProLearning, Nov 2026)
+    "centre": (0, 150000), "entreprise": (0, 210000), "elearning": (0, 240000), "complete": (0, 350000),
+    # modules bought later
+    "m_rh": (0, 90000), "m_elearn": (0, 80000), "m_eval": (0, 50000), "m_interact": (0, 40000), "m_ai": (0, 30000),
+    # previous offers, kept for existing schools
+    "pass": (365, 8000), "ultimate": (730, 14000), "lifetime": (0, 60000),
 }
+SALE_PLANS = ["centre", "entreprise", "elearning", "complete"]
+ADDON_PLANS = ["m_rh", "m_elearn", "m_eval", "m_interact", "m_ai"]
+
+# Optional modules. School.modules = None means every module (trial, previous offers).
+MODULES = {"rh": "Entreprises & RH", "elearning": "E-learning", "eval": "Évaluation",
+           "interact": "Interaction & certification", "ai": "Assistant IA"}
+MODULE_NEEDS = {"eval": "elearning", "interact": "elearning", "ai": "elearning"}
+PLAN_MODULES = {"centre": [], "entreprise": ["rh"], "elearning": ["elearning", "eval"],
+                "complete": list(MODULES), "m_rh": ["rh"], "m_elearn": ["elearning"], "m_eval": ["eval"],
+                "m_interact": ["interact"], "m_ai": ["ai"]}
 
 
 class School(db.Model):
@@ -45,7 +61,19 @@ class School(db.Model):
     support_until = db.Column(db.Date, nullable=True)
     active = db.Column(db.Boolean, default=True)            # False = suspended by the platform
     notes = db.Column(db.Text, nullable=True)
+    modules = db.Column(db.String(80), nullable=True)       # "rh,elearning,…" ; None = all modules
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def module_set(self):
+        return set(MODULES) if self.modules is None else {x for x in self.modules.split(",") if x in MODULES}
+
+    def has(self, mod):
+        s = self.module_set()
+        return mod in s and (mod not in MODULE_NEEDS or MODULE_NEEDS[mod] in s)
+
+    def set_modules(self, mods):
+        mods = set(mods) & set(MODULES)
+        self.modules = ",".join(k for k in MODULES if k in mods)
 
     def days_left(self, today):
         return None if self.expires_on is None else (self.expires_on - today).days
@@ -635,3 +663,11 @@ class CourseAward(Tenant, db.Model):
     grade = db.Column(db.Float, nullable=True)          # average /100 at issue time
     issued_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (db.UniqueConstraint("course_id", "enrollment_id", name="uq_award"),)
+
+
+class Backup(Tenant, db.Model):
+    """Automatic daily copy of a school's data (.hedu format), kept 30 days."""
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    size = db.Column(db.Integer, default=0)
+    data = db.Column(db.LargeBinary, nullable=False)

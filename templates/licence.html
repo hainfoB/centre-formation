@@ -14,26 +14,40 @@
 <form method="post" class="row" style="gap:8px;flex-wrap:wrap"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <input name="key" required placeholder="HEDU-XXXX-XXXX-XXXX" style="flex:1;min-width:240px;font-family:monospace" dir="ltr" autocomplete="off"><button class="btn o"><i class="bi bi-key"></i> {{ _("Activer") }}</button></form></div>
 
+<div class="card"><h2>{{ _("Modules de votre licence") }}</h2><div class="row" style="gap:8px;flex-wrap:wrap">
+<span class="badge b-confirmed"><i class="bi bi-check2"></i> {{ _("Gestion (socle)") }}</span>
+{% for k, label in MODULES.items() %}{% if sc.has(k) %}<span class="badge b-confirmed"><i class="bi bi-check2"></i> {{ _(label) }}</span>{% else %}<span class="badge"><i class="bi bi-lock"></i> {{ _(label) }}</span>{% endif %}{% endfor %}</div></div>
+
 <div class="plans">
-{% for code in ['pass','ultimate','lifetime'] %}{% set days, price = plans[code] %}
-<div class="card plan {{ 'best' if code=='ultimate' }}">
-  {% if code=='ultimate' %}<span class="ribbon">{{ _("Le plus choisi") }}</span>{% endif %}
+{% for code in sale_plans %}{% set days, price = plans[code] %}
+<div class="card plan {{ 'best' if code=='complete' }}">
+  {% if code=='complete' %}<span class="ribbon">{{ _("Recommandé") }}</span>{% endif %}
   <h3>{{ _(names[code]) }}</h3><div class="price">{{ price|da }}</div>
-  <div class="xs muted">{% if code=='pass' %}{{ _("soit {m} par mois", m=(price/12)|round|int|da) }}{% elif code=='ultimate' %}{{ _("soit {m} par mois — 3 mois offerts", m=(price/24)|round|int|da) }}{% else %}{{ _("paiement unique") }}{% endif %}</div>
+  <div class="xs muted">{{ _("licence définitive, paiement unique") }}</div>
   <ul class="ticks small">
-    <li>{{ _("Toutes les fonctions, utilisateurs illimités") }}</li>
-    {% if code=='lifetime' %}<li>{{ _("Version locale sur le PC de l'école, sans Internet") }}</li><li>{{ _("Réseau local : téléphones et PC de l'école") }}</li><li>{{ _("1 an de version en ligne offert, puis en option") }}</li><li>{{ _("Service client gratuit pendant 6 mois") }}</li>
-    {% else %}<li>{{ _("En ligne : parents et enseignants depuis leur téléphone") }}</li><li>{{ _("Hébergement, sauvegardes et mises à jour inclus") }}</li><li>{{ _("Support WhatsApp inclus") }}</li>{% endif %}
+    <li>{{ _("Gestion : inscriptions, présences, paiements, caisse, paie, attestations") }}</li>
+    {% for m in plan_modules[code] %}<li>{{ _(MODULES[m]) }}</li>{% endfor %}
+    <li>{{ _("Installation, import des données et 1 jour de formation") }}</li>
+    <li>{{ _("12 mois de mises à jour et de support") }}</li>
   </ul>
-  <a class="btn {{ 'o' if code=='ultimate' else 'ghost' }}" href="{{ sales_wa(code) }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> {{ _("Commander") }}</a>
+  <a class="btn {{ 'o' if code=='complete' else 'ghost' }}" href="{{ sales_wa(code) }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> {{ _("Commander") }}</a>
 </div>{% endfor %}
 </div>
+<div class="card"><h2>{{ _("Ajouter un module") }}</h2><div class="row" style="gap:10px;flex-wrap:wrap">
+{% for code in addon_plans %}{% set m = plan_modules[code][0] %}{% if not sc.has(m) or sc.modules is none %}{% if sc.modules is not none %}
+<a class="btn sm ghost" href="{{ sales_wa(code) }}" target="_blank" rel="noopener">{{ _(MODULES[m]) }} — {{ plans[code][1]|da }}</a>{% endif %}{% endif %}{% endfor %}
+{% if sc.modules is none %}<span class="small muted">{{ _("Votre offre actuelle inclut tous les modules.") }}</span>{% endif %}</div>
+<p class="xs muted" style="margin-top:8px">{{ _("Jusqu'à 500 stagiaires actifs. Hébergement en ligne : 1re année incluse, puis 30 000 DA par an (facultatif). Mises à jour après 12 mois : 15 % du prix par an (facultatif).") }}</p></div>
 
 <div class="card"><h2>{{ _("Transférer vos données") }}</h2>
 <p class="small muted">{{ _("Passez de la version locale à la version en ligne (ou l'inverse), ou gardez une copie de sécurité : le fichier contient élèves, formations, séances, présences, paiements, caisse et paramètres.") }}</p>
 <div class="grid g2">
 <div><h3 class="small">{{ _("1. Exporter") }}</h3><a class="btn ghost" href="{{ url_for('data_export') }}"><i class="bi bi-download"></i> {{ _("Télécharger mes données (.hedu)") }}</a>
 <p class="xs muted">{{ _("Pour un tableau lisible dans Excel, utilisez la sauvegarde Excel des Paramètres.") }}</p></div>
+<div class="span2"><h3 class="small">{{ _("Sauvegardes automatiques (une par jour, 30 jours)") }}</h3>
+{% if backups %}<div class="row" style="gap:6px;flex-wrap:wrap">{% for b in backups[:10] %}<a class="btn sm ghost" href="{{ url_for('backup_download', bid=b.id) }}"><i class="bi bi-clock-history"></i> {{ b.created_at|d }}</a>{% endfor %}</div>
+<p class="xs muted">{{ _("{n} copie(s) disponible(s). Gardez aussi une copie hors de la plateforme : téléchargez-en une chaque mois.", n=backups|length) }}</p>
+{% else %}<p class="xs muted">{{ _("La première copie automatique sera faite dans l'heure.") }}</p>{% endif %}</div>
 <div><h3 class="small">{{ _("2. Importer sur l'autre version") }}</h3>
 <form method="post" action="{{ url_for('data_import') }}" enctype="multipart/form-data" onsubmit='return confirm({{ _("Toutes les données actuelles de cette école seront remplacées par celles du fichier. Continuer ?")|tojson }})'>
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

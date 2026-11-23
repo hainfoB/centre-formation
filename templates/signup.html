@@ -3,12 +3,12 @@
 {% block public %}<div class="signup">
 <div class="card signpitch"><span class="badge b-open">{{ _("30 jours gratuits · sans engagement") }}</span>
 <h1>{{ _("Créez l'espace de votre école en 2 minutes") }}</h1>
-<ul class="ticks"><li>{{ _("Élèves, inscriptions en ligne et import Excel") }}</li><li>{{ _("Présences par QR code et alertes d'absence aux parents") }}</li>
-<li>{{ _("Échéanciers, reçus et relances WhatsApp") }}</li><li>{{ _("Caisse, paie des enseignants et bénéfices") }}</li><li>{{ _("Espace parents, attestations, arabe / français / anglais") }}</li></ul>
+<ul class="ticks"><li>{{ _("Inscriptions, présences QR, paiements, caisse et paie") }}</li><li>{{ _("Entreprises clientes : espace RH et émargement envoyé par email") }}</li>
+<li>{{ _("Attestations par groupe avec bordereau") }}</li><li>{{ _("Cours en ligne, quiz, devoirs, notes et badges") }}</li><li>{{ _("Arabe / français / anglais, sur téléphone et ordinateur") }}</li></ul>
 <div class="plans mini">
-<div><b>{{ _("Pass+") }}</b><span>{{ 8000|da }}<br>{{ _("an") }}</span></div>
-<div class="best"><b>{{ _("Ultimate") }}</b><span>{{ 14000|da }}<br>{{ _("2 ans") }}</span></div>
-<div><b>{{ _("À vie") }}</b><span>{{ 60000|da }}<br>{{ _("paiement unique") }}</span></div></div>
+<div><b>{{ _("Pack Centre") }}</b><span>{{ 150000|da }}<br>{{ _("licence définitive") }}</span></div>
+<div><b>{{ _("Pack Entreprise") }}</b><span>{{ 210000|da }}<br>{{ _("licence définitive") }}</span></div>
+<div class="best"><b>{{ _("Académie complète") }}</b><span>{{ 350000|da }}<br>{{ _("licence définitive") }}</span></div></div>
 <p class="xs muted">{{ _("Vos données restent les vôtres : export complet à tout moment.") }}</p></div>
 <div class="card"><h2>{{ _("Votre école") }}</h2>
 <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">

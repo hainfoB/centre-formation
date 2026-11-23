@@ -81,7 +81,8 @@ def school_slug(name):
 # ── Licences ──────────────────────────────────────────────────────────────────────────────────────
 # Clé publique de vérification (la clé privée n'existe que sur la plateforme : LICENSE_PRIVATE_KEY).
 LICENSE_PUBLIC_KEY = "bswXd3tZ2/eg/EIO6vB8NuhU6iXHJoru+lInBVfrXF4="
-_PLAN_CODES = {"trial": 1, "pass": 2, "ultimate": 3, "lifetime": 4}
+_PLAN_CODES = {"trial": 1, "pass": 2, "ultimate": 3, "lifetime": 4, "centre": 5, "entreprise": 6, "elearning": 7,
+               "complete": 8, "m_rh": 9, "m_elearn": 10, "m_eval": 11, "m_interact": 12, "m_ai": 13}
 _CODE_PLANS = {v: k for k, v in _PLAN_CODES.items()}
 _EPOCH = date(2026, 1, 1)
 _ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # no 0/O, 1/I
@@ -110,7 +111,7 @@ def can_sign():
 
 def make_short_key():
     """Online key HEDU-XXXX-XXXX-XXXX (checked against the platform database)."""
-    body = "".join(secrets.choice(_ALPH) for _ in range(12))
+    body = secrets.choice(_ALPH.replace("L", "")) + "".join(secrets.choice(_ALPH) for _ in range(11))  # never "HEDUL…"
     return "HEDU-" + "-".join(body[i:i + 4] for i in range(0, 12, 4))
 
 
@@ -147,8 +148,23 @@ def read_signed_key(code):
 
 
 def apply_plan(school, plan, today):
+    from models import ADDON_PLANS, MODULES, PLAN_MODULES, SALE_PLANS
     days = PLANS[plan][0]
-    school.plan = plan
+    if plan in ADDON_PLANS:          # one more module on a definitive licence
+        if school.modules is None:   # trial or previous offer: already every module
+            return
+        cur = school.module_set()
+        school.set_modules(cur | set(PLAN_MODULES[plan]))
+        return
+    prev, school.plan = school.plan, plan
+    if plan in SALE_PLANS:           # definitive pack: modules of the pack (added to a previous pack), 12 months of support
+        cur = school.module_set() if (school.modules is not None and prev in SALE_PLANS) else set()
+        school.set_modules(cur | set(PLAN_MODULES[plan]))
+        school.expires_on = None
+        school.support_until = today + timedelta(days=365)
+        return
+    if plan != "trial":              # previous offers include every module
+        school.modules = None
     if plan == "lifetime":
         school.expires_on = None
         school.support_until = today + timedelta(days=183)
@@ -170,7 +186,7 @@ def activate_key(school, code, today):
             plan, tag = signed
             if tag != b"\0\0\0\0" and tag != _name_tag(school.name):
                 return False, "other_school"
-        elif row and not clean_key(code).startswith("HEDUL"):
+        elif row and (row.code or "").upper().startswith("HEDU-"):   # online key (HEDU-L… is not a signed key)
             plan = row.plan
         else:
             return False, "invalid"
@@ -184,6 +200,21 @@ def activate_key(school, code, today):
         row.used_school_id, row.used_at = school.id, datetime.utcnow()
         apply_plan(school, plan, today)
     return True, plan
+
+
+def wipe_school(sid):
+    """Delete every row of a school (all tenant tables), then the school itself."""
+    from models import AuditLog, Backup, EmailLog, Setting
+    order, _f, _u = _models()
+    with as_school(sid):
+        User.query.filter(User.company_id.isnot(None)).update({"company_id": None}, synchronize_session=False)
+        for m in reversed(order):
+            m.query.delete(synchronize_session=False)
+        for m in (Backup, EmailLog, Setting, AuditLog, User):
+            m.query.delete(synchronize_session=False)
+    with unscoped():
+        LicenseKey.query.filter_by(used_school_id=sid).update({"used_school_id": None}, synchronize_session=False)
+        db.session.delete(db.session.get(School, sid))
 
 
 # ── Transfert des données d'une école (local ⇄ en ligne) ────────────────────────────────────────
